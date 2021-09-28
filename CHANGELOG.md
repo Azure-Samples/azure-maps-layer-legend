@@ -1,13 +1,6 @@
-## [project-title] Changelog
+# azure-maps-layer-legend Changelog
 
-<a name="x.y.z"></a>
-# x.y.z (yyyy-mm-dd)
+<a name="0.0.1"></a>
+## 0.0.1 (2021-09-28)
 
-*Features*
-* ...
-
-*Bug Fixes*
-* ...
-
-*Breaking Changes*
-* ...
+- Initial release.
