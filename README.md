@@ -17,9 +17,9 @@ An Azure Maps Web SDK module that provides UI controls for dynamically styling l
 
 See the [documentation](https://github.com/Azure-Samples/azure-maps-layer-legend/tree/master/docs) for more details.
 
-![Category legend](https://github.com/Azure-Samples/azure-maps-layer-legend/tree/master/docs/images/category-legend.jpg?raw=true)
+![Category legend](https://github.com/Azure-Samples/azure-maps-layer-legend/blob/main/docs/images/category-legend.jpg?raw=true)
 
-![Layer control](https://github.com/Azure-Samples/azure-maps-layer-legend/tree/master/docs/images/layer-control-list.jpg?raw=true)
+![Layer control](https://github.com/Azure-Samples/azure-maps-layer-legend/blob/main/docs/images/layer-control-list.jpg?raw=true)
 
 ## Related Projects
 
