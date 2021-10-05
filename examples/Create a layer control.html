@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <title>Create a layer control - Azure Maps Web SDK Samples</title>
 
@@ -8,12 +7,11 @@
     <meta http-equiv="x-ua-compatible" content="IE=Edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <meta name="description" content="This sample loads Mapbox styles of a GeoJSON polygon into Azure Maps." />
-    <meta name="keywords" content="Microsoft maps, maps, map, API, SDK, GIS, layer control" />>
+    <meta name="keywords" content="Microsoft maps, maps, map, API, SDK, GIS, layer control" />
     <meta name="author" content="Microsoft Azure Maps" />
 
     <!-- Add references to the Azure Maps Map control JavaScript and CSS files. -->
-    <link rel="stylesheet" href="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.css"
-        type="text/css" />
+    <link rel="stylesheet" href="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.css" type="text/css" />
     <script src="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.js"></script>
 
     <!-- Load in the JavaScript and CSS files that has our custom control. -->
@@ -31,84 +29,23 @@
                 //Add authentication details for connecting to Azure Maps.
                 authOptions: {
                     //Use Azure Active Directory authentication.
-                    authType: 'anonymous',
+                   /* authType: 'anonymous',
                     clientId: "04ec075f-3827-4aed-9975-d56301a2d663", //Your Azure Active Directory client id for accessing your Azure Maps account.
                     getToken: function (resolve, reject, map) {
                         //URL to your authentication service that retrieves an Azure Active Directory Token.
                         var tokenServiceUrl = "https://azuremapscodesamples.azurewebsites.net/Common/TokenService.ashx";
 
                         fetch(tokenServiceUrl).then(r => r.text()).then(token => resolve(token));
-                    }
+                    }*/
 
                     //Alternatively, use an Azure Maps key. Get an Azure Maps key at https://azure.com/maps. NOTE: The primary key should be used as the key.
-                    //authType: 'subscriptionKey',
-                    //subscriptionKey: '<Your Azure Maps Key>'
+                    authType: 'subscriptionKey',
+                    subscriptionKey: '<Your Azure Maps Key>'
                 }
             });
 
             //Wait until the map resources are ready.
             map.events.add('ready', function () {
-                /***************************************************
-                 * Start: Sample data set. Only used for visualization. 
-                 * Layers must be added to the map before being added to the layer control.
-                 ***************************************************/
-
-                //Create a data source and add it to the map.
-                var source = new atlas.source.DataSource();
-                map.sources.add(source);
-
-                //Load the earthquake data.
-                source.importDataFromUrl('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.geojson');
-
-                map.layers.add([
-                    //Create a layer that defines how to render the shapes in the data source and add it to the map.
-                    new atlas.layer.BubbleLayer(source, 'earthquake-circles', {
-                        //Bubbles are made semi-transparent.
-                        opacity: 0.75,
-
-                        //Color of each bubble based on the value of "mag" property using a color gradient of green, yellow, orange, and red.
-                        color: [
-                            'interpolate',
-                            ['linear'],
-                            ['get', 'mag'],
-                            0, 'green',
-                            5, 'yellow',
-                            6, 'orange',
-                            7, 'red'
-                        ],
-
-                        /*
-                         * Radius for each data point scaled based on the value of "mag" property.
-                         * When "mag" = 0, radius will be 2 pixels.
-                         * When "mag" = 8, radius will be 40 pixels.
-                         * All other "mag" values will be a linear interpolation between these values.
-                         */
-                        radius: [
-                            'interpolate',
-                            ['linear'],
-                            ['get', 'mag'],
-                            0, 2,
-                            8, 40
-                        ]
-                    }),
-
-                    //Create a symbol layer using the same data source to render the magnitude as text above each bubble and add it to the map.
-                    new atlas.layer.SymbolLayer(source, 'earthquake-labels', {
-                        iconOptions: {
-                            //Hide the icon image.
-                            image: 'none'
-                        },
-                        textOptions: {
-                            //An expression is used to concerte the "mag" property value into a string and appends the letter "m" to the end of it.
-                            textField: ['concat', ['to-string', ['get', 'mag']], 'm'],
-                            textSize: 12
-                        }
-                    })
-                ]);
-
-                /**************************
-                 * End: Sample data set.
-                 **************************/
 
                 //Create a legend control that the layer control will leverage.
                 legend = new atlas.control.LegendControl({
@@ -127,8 +64,13 @@
                     //Attach the legend control.
                     legendControl: legend,
 
+                    dynamicLayerGroup: {
+                        groupTitle: 'Layers',
+                        layout: 'checkbox'
+                    },
+
                     //Specify the layer groups for the control. 
-                    layerGroups: [
+                    layerGroups: [                       
 
                         //A dropdown layer group option.
                         {
@@ -170,54 +112,28 @@
                             layout: 'checkbox',
 
                             //A title for this layer group.
-                            groupTitle: 'Visibility',
+                            groupTitle: 'Magnitude filter',
 
                             //The layers affected by this group. 
                             layers: ['earthquake-circles', 'earthquake-labels'],
 
-                            //One or more legends that should always be shown 
-                            legends: [{
-                                type: 'image',
-                                subtitle: 'Map icons',
-                                url: 'https://i0.wp.com/gisgeography.com/wp-content/uploads/2016/05/Map-Example-Legend.png',
-                                altText: 'A legend for the icons on the map.',
-                                maxHeight: 200
-                            }],
                             items: [
                                 {
                                     layout: 'checkbox',
-                                    label: 'Visible toggle',
+                                    label: 'mag > 6',
 
                                     //Optionally specify if the state is enabled or not initially.
-                                    enabled: true,
+                                    enabled: false,
 
                                     //Style to apply when a checkbox is checked.
                                     enabledStyle: {
-                                        visible: true
+                                        filter: ['>', ['get', 'mag'], 6]
                                     },
 
                                     //Style to apply when a checkbox is unchecked.
                                     disabledStyle: {
-                                        visible: false
-                                    },
-
-                                    //One or more legends to display for this layer group. If min/max zoom specified for the layer item, these legend cards will hide/show accordingly. 
-                                    legends: [{
-                                        type: 'gradient',
-                                        orientation: 'vertical',
-                                        barLength: 75,
-                                        stops: [
-                                            {
-                                                offset: 0,
-                                                color: 'rgba(0,0,0,0)',
-                                                label: 'Transparent'
-                                            }, {
-                                                offset: 1,
-                                                color: 'black',
-                                                label: 'Solid'
-                                            }
-                                        ]
-                                    }]
+                                        filter: null
+                                    }
                                 }
                             ]
                         },
@@ -310,7 +226,65 @@
                 map.events.add('toggled', legend, function (e) {
                     console.log('Minified ' + e.minimized);
                 });
+
+                //Load some mock data for the example.
+                loadMockData();
             });
+        }
+
+        function loadMockData(){
+            //Create a data source and add it to the map.
+            var source = new atlas.source.DataSource();
+            map.sources.add(source);
+
+            //Load the earthquake data.
+            source.importDataFromUrl('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.geojson');
+
+            map.layers.add([
+                //Create a layer that defines how to render the shapes in the data source and add it to the map.
+                new atlas.layer.BubbleLayer(source, 'earthquake-circles', {
+                    //Bubbles are made semi-transparent.
+                    opacity: 0.75,
+
+                    //Color of each bubble based on the value of "mag" property using a color gradient of green, yellow, orange, and red.
+                    color: [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'mag'],
+                        0, 'green',
+                        5, 'yellow',
+                        6, 'orange',
+                        7, 'red'
+                    ],
+
+                    /*
+                        * Radius for each data point scaled based on the value of "mag" property.
+                        * When "mag" = 0, radius will be 2 pixels.
+                        * When "mag" = 8, radius will be 40 pixels.
+                        * All other "mag" values will be a linear interpolation between these values.
+                        */
+                    radius: [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'mag'],
+                        0, 2,
+                        8, 40
+                    ]
+                }),
+
+                //Create a symbol layer using the same data source to render the magnitude as text above each bubble and add it to the map.
+                new atlas.layer.SymbolLayer(source, 'earthquake-labels', {
+                    iconOptions: {
+                        //Hide the icon image.
+                        image: 'none'
+                    },
+                    textOptions: {
+                        //An expression is used to concerte the "mag" property value into a string and appends the letter "m" to the end of it.
+                        textField: ['concat', ['to-string', ['get', 'mag']], 'm'],
+                        textSize: 12
+                    }
+                })
+            ]);
         }
     </script>
 </head>
@@ -329,5 +303,4 @@
 
     <div id="outsidePanel"></div>
 </body>
-
 </html>

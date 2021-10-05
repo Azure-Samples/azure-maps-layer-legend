@@ -25,6 +25,7 @@ See the following examples for the different legend types.
 - [Gradient legend examples](gradient_legend_examples.md)
 - [HTML legend examples](html_legend_examples.md)
 - [Image legend examples](image_legend_examples.md)
+- [Dynamic legends](dynamic_legends.md)
 
 ## Implementation
 
@@ -71,7 +72,6 @@ var legend = new atlas.control.LegendControl({
         {
             type: 'category',
             subtitle: 'Category - Scaled shapes',
-            cssClass: 'centerItems',
             layout: 'column-reverse',
             itemLayout: 'row',
             shape: 'circle',
@@ -161,7 +161,7 @@ Options for a legend control.
 | `style` | `atlas.ControlStyle` \| `'auto-reverse'` \| `string` | The style of the control. Can be `'light'`, `'dark'`, `'auto'`, `'auto-reverse'`, or any CSS3 color string. Default: `'light'` |
 | `title` | `string` | The top level title of the legend control. |
 | `visible` | `boolean` | Specifies if the overview map control is visible or not. Default: `true` |
-| `zoomRangeBehavior` | `'disable'` \| `'hide'` | Specifies how a layer group or state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'hide'` |
+| `zoomBehavior` | `'disable'` \| `'hide'` | Specifies how all legend cards should be treated when the map zoom level falls outside of the items min and max zoom range. Can be overridden at the legend type setting level. Default: `'hide'` |
 
 ### LegendType interface
 
@@ -177,6 +177,7 @@ Base legend type that all other legend types inherit from.
 | `maxZoom` | `number` | Max zoom level that this legend should appear. Default: `24` |
 | `minZoom` | `number` | Min zoom level that this legend should appear.  Default: `0` |
 | `subtitle` | `string` | The title for this specific legend. |
+| `zoomBehavior` | `'disable'` \| `'hide'` | Specifies how a legend card should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'hide'` |
 
 ### CategoryLegendType interface
 
@@ -190,6 +191,7 @@ Category legend type options.
 |------|-------|-------------|
 | `type` | `'category'` | **Required.** The type of legend. |
 | `items` | `CategoryLegendItem[]` | **Required.** The category items. |
+| `collapse` | `boolean` | Specifies if space around the shapes should be collapsed so that items are close together. Default: `false` |
 | `color` | `string` | The fill color of SVG items in all category items. |
 | `fitItems` | `boolean` | Specifies if all items should be fit into the largest container created by an item. Default: `false` |
 | `itemLayout` | `'row'` \| `'row-reverse'` \| `'column'` \| `'column-reverse'` | How the color swatch and label of each item are laid out. Overrides the CSS `flex-direction` style. Default: `'row'` |
@@ -214,6 +216,7 @@ Category legend item options.
 | `label` | `string` \| `number` | The label to display for the item. |
 | `shape` | `'circle'` \| `'triangle'` \| `'square'` \| `'line'` \| `string` | The shape of the color swatch. Overrides the top level shape setting for this individual item. Supports image urls and SVG strings. |
 | `shapeSize` | `number` | The size of the individual shape in pixels. Used to scale the width of the shape. Overrides `CategoryLegendType` level `shapeSize`. Default: `20` |
+| `strokeWidth` | `number` | The thickness of the stroke on SVG shapes in pixels. Overrides `CategoryLegendType` level `strokeWidth`. Default: `1` |
 
 ### ImageLegendType interface
 
@@ -276,6 +279,73 @@ Color stop used for gradients and steps.
 | `color` | `string` | **Required.** The color to apply at the stop. |
 | `offset` | `number` | **Required.** The offset to add the color to the gradient. 0.0 is the offset at one end of the gradient, 1.0 is the offset at the other end. |
 | `label` | `string` \| `number` | A label to display at this stop. |
+
+### DynamicLegendType interface
+
+**Extends:** `LegendType` interface
+
+A legend that dynamically generated from a layers style. See [Dynamic legends](dynamic_legends.md) for more details.
+
+**Properties** 
+
+| Name | Value | Description |
+|------|-------|-------------|
+| `type` | `'dynamic'` | **Required.** The type of legend to create. |
+| `layer` | `string` \| `azmaps.layer.Layer` | **Required.** The layer to generate the legend(s) for. |
+| `cssClass` | `string` | A CSS class added to all legend cards. |
+| `defaultCategory` | `CategoryDefaults` | Default options to apply to category legends. |
+| `defaultImage` | `ImageDefaults` | Default options for image legends. |
+| `defaultGradient` | `GradientDefaults` | Default options for gradient legends. |
+| `subtitleFallback` | `'auto'` \| `'expression'` \| `'none'` \| `string` | Specifies how subtitles should be set if not explicitly set in the legend type.<br/> - `'auto'` - Looks at the layers metadata for the following properties, in this order `'title'`,  `'subtitle'`. Falls back to the layers ID.<br/> - `'expression'` - If a style expression has a simple `get` expression such as `['get', 'revenue']` the property name will be extracted and set as the subtitle of the legend card. Falls back to the layers ID.<br/> - `'none'` - No subtitle value is added to the legend.<br/> - `string` - The name of a property in the layers metadata to use as the subtitle.<br/>Falls back to the layers ID unless set to `'none'`.<br/>Default: `'auto'` |
+| `footerFallback` | `'auto'` \| `'none'` \| `string` | Specifies how footer should be set if not explicitly set in the legend type.<br/> - `'auto'` - Looks at the layers metadata for the following properties, in this order `'footer'`,  `'description'`, `'abstract'`<br/> - `'none'` - No footer value is added to the legend.<br/> - `string` - The name of a property in the layers metadata to use as the footer.<br/> Default: `'auto'` |
+
+### CategoryDefaults interface
+
+A subset of category legend options to use as default settings for any dynamically generated legend that is rendered as a category legend.
+
+**Properties** 
+
+| Name | Value | Description |
+|------|-------|-------------|
+| `color` | `string` | The fill color of SVG items in all category items. |
+| `cssClass` | `string` | A CSS class added to an individual item. |
+| `fitItems` | `boolean` | Specifies if all items should be fit into the largest container created by an item. Default: `false` |
+| `itemLayout` | `'row'` \| `'row-reverse'` \| `'column'` \| `'column-reverse'` | How the color swatch and label of each item are laid out. Overrides the CSS `flex-direction` style. Default: `'row'` |
+| `labelsOverlapShapes` | `boolean` | Specifies if the text label should overlap the shapes. When set to `true`, the position of the label span will be set to `absolute`. Default: `false`  |
+| `layout` | `'row'` \| `'row-reverse'` \| `'column'` \| `'column-reverse'` | How all items are laid out. Overrides the CSS `flex-direction` style. Default: `'column'` |
+| `numberFormat` | `Intl.NumberFormatOptions` | The number format options to use when converting a number label to a string. |
+| `numberFormatLocales` | `string` \| `string[]` | The number format locales to use when converting a number label to a string. |
+| `shape` | `'circle'` \| `'triangle'` \| `'square'` \| `'line'` \| `string` | The shape of the color swatches of all items. Supports image urls and SVG strings. Default: `'circle'` |
+| `shapeSize` | `number` | The size of the all shapes in pixels. Used to scale the width of the shape. Default: `20` |
+| `strokeWidth` | `number` | The thickness of the stroke on SVG shapes in pixels. Default: `1` |
+
+### ImageDefaults interface
+
+A subset of image legend options to use as default settings for any dynamically generated legend that is rendered as a image legend.
+
+**Properties** 
+
+| Name | Value | Description |
+|------|-------|-------------|
+| `maxHeight` | `number` | Max height of the image. |
+| `maxWidth` | `number` | Max width of the image. |
+
+### GradientDefaults interface
+
+A subset of gradient legend options to use as default settings for any dynamically generated legend that is rendered as a gradient legend.
+
+**Properties** 
+
+| Name | Value | Description |
+|------|-------|-------------|
+| `barLength` | `number` | The length of the gradient bar in pixels. Default: `256` |
+| `barThickness` | `number` | How thick the gradient bar should be in pixels. Default: `20` |
+| `fontFamily` | `string` | The font family used for labels. Default: `"'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif"` |
+| `fontSize` | `number` | The font size used for labels. Default: `12` |
+| `numberFormat` | `Intl.NumberFormatOptions` | The number format options to use when converting a number label to a string. |
+| `numberFormatLocales` | `string` \| `string[]` | The number format locales to use when converting a number label to a string. |
+| `orientation` | `'vertical'` \| `'horizontal'` | The orientation of the legend. Default: `'horizontal'` |
+| `tickSize` | `number` | The length of line ticks for each label. Default: `5` |
 
 ### LegendFocusEventArgs interface
 

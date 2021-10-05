@@ -27,17 +27,25 @@
     background-repeat: no-repeat;
 }
 
+.atlas-layer-btn:hover {
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' version='1.1' width='24px' height='24px' viewBox='0 0 477 477' xml:space='preserve'%3E%3Cpath fill='DeepSkyBlue' d='M470,224c-0-0-1-0-1-0L435,205l-188,99c-5,2-11,2-16,0L42,205L9,223 c-8,4-11,14-7,22c0,0,0,1,0,1l236,125l236-125C480,240,478,230,470,224z M475,333 c-1-2-4-5-6-6L435,308l-188,99c-5,2-11,2-16,0L42,308L9,326c-8,4-11,14-6,23 c1,2,4,5,6,6l221,119c5,2,11,2,16,0l221-119C477,351,480,341,475,333z M470,122 c-0-0-1-0-1-0L247,2c-5-2-11-2-16,0L9,121c-8,4-11,14-7,22c0,0,0,1,0,1l236,125 l236-125C480,138,478,127,470,122z'%3E%3C/path%3E%3C/svg%3E");
+}
+
 .atlas-legend-btn {
-    background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABYAAAAWCAYAAADEtGw7AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH5QkbECMdwdwqtgAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAABX0lEQVQ4y9XUPWtUURDG8d/NXhJRFESQFBKwUGy0lXSLIoqNhW9FUCwsBBtbuwcLW0HQbyCIlVgaEhbFQrASERv9AIJg4wq6bmxmIXbu3m0y3Zlzzv/MmZln2PGWZL6wJL0kx+YFb7bBr+Ip9if5Xr4GCzNw/7QFWC7oEzzE9TpwFremhP7EnbYWD/C8oOtJziRZx0tszBDxqEmyhLs4hCUM8QwbXXLdVCpWsFy+LXxJ8q1L8XpJFjHAYaxWfvf0+/3Xg8FgZvAkxz+SrFX0V3CkWvAabtYv/td+40ZTEb/Chdq4jH24j4M4Pm3h8LbFGJ+r3VQBH1f0X2fsin8EshuLGCb51VV5CwVdwyfcw4ckq50lnWQX3uBkklGSiziN2ziBS1Myh3jUVsXHOIqPOFC+Leytg9N0xRi9iUDO4wXeYQXnkrzvNOUml5O0SU7VROs8OtttD4ywOfdhv2PsL/qEeBm5zTq0AAAAAElFTkSuQmCC");
+    background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH5QoEFC8mlLEZWwAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAAAVElEQVRIx2P8//8/Ay0BEwONwagFA28BC7pAS2cfRrKqKS9ipJoF6AYiW4jNckKOYSHFNeT4hCQLcPkAn8Us1DIIF2Ac8kXFaDIdTaajxfWoBUQAANzmNAXUeVukAAAAAElFTkSuQmCC");
     background-position: center;
     background-repeat: no-repeat;
+}
+
+.atlas-legend-btn:hover {
+    background-image:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH5QoEFDAyQzHDuAAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAAAVElEQVRIx2P8//8/Ay0BEwONwagFA28BC7oA4wEGjGT134GBkWoWoBuIbCE2ywk5hoUU15DjE5IswOUDfBazUMsgnI4a8kXFaDIdTaajxfWoBUQAANQCKbkYDf6GAAAAAElFTkSuQmCC");
 }
 
 /** Container that wraps control when displayed within map area.*/
 .atlas-legend-control-container, .atlas-layer-control-container {
     border-radius: 5px;
-    overflow-y:auto;
     flex-direction: column;
+    overflow: auto;
 }
 
 .atlas-legend-control {
@@ -75,26 +83,20 @@
     clear: both;
 }
 
-.atlas-legend-image-legend {
-    overflow: auto;
-}
-
 .atlas-legend-image-legend img {
     display: block;
     margin: 0 auto;
-    max-width: 400px;
-    max-height: 400px;
 }
 
 .atlas-legend-category-legend {
     display: flex;
     flex-direction: column;
-    overflow: auto;
     width: fit-content;
     margin: 0 auto;
 }
 
 .atlas-legend-category-item {
+    position: relative;
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -150,24 +152,20 @@
 }
 
 .atlas-layer-range span {
+    display: inline-block;
     margin-left: 5px;
     min-width: 30px;
-}
-
-/* Carousel container */
-.atlas-layer-legend-card-container {
-  max-width: fit-content;
-  position: relative;
-  margin: auto;
 }
 
 .atlas-carousel-dot-container {
     padding: 5px;
     text-align:center;
+    margin-top: 1px;
     box-shadow: 0 -1px 0 #717171;
 }
 
 .atlas-layer-legend-card {
+    overflow: auto;
     padding: 10px;
 }
 
@@ -205,6 +203,7 @@
 }
 
 .atlas-accordion-button {
+    display: block;
     line-height: 18px;
     min-width: max-content;
     outline: none;
@@ -230,4 +229,3 @@
     float:right;
     margin-left:10px;
 }
-  

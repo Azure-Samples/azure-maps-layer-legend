@@ -33,18 +33,18 @@
                 //Add authentication details for connecting to Azure Maps.
                 authOptions: {
                     //Use Azure Active Directory authentication.
-                    authType: 'anonymous',
+                   /* authType: 'anonymous',
                     clientId: "04ec075f-3827-4aed-9975-d56301a2d663", //Your Azure Active Directory client id for accessing your Azure Maps account.
                     getToken: function (resolve, reject, map) {
                         //URL to your authentication service that retrieves an Azure Active Directory Token.
                         var tokenServiceUrl = "https://azuremapscodesamples.azurewebsites.net/Common/TokenService.ashx";
 
                         fetch(tokenServiceUrl).then(r => r.text()).then(token => resolve(token));
-                    }
+                    }*/
 
                     //Alternatively, use an Azure Maps key. Get an Azure Maps key at https://azure.com/maps. NOTE: The primary key should be used as the key.
-                    //authType: 'subscriptionKey',
-                    //subscriptionKey: '<Your Azure Maps Key>'
+                    authType: 'subscriptionKey',
+                    subscriptionKey: '<Your Azure Maps Key>'
                 }
             });
 
@@ -110,42 +110,43 @@
                     }
                 });
 
-                /***************************************************
-                 * Sample data set. Only used for visualization. 
-                 ***************************************************/
-
-                //Create a data source and add it to the map.
-                var source = new atlas.source.DataSource();
-                map.sources.add(source);
-
-                //Create mock data and add to the data source.
-                var mockData = [];
-
-                for(var i=0;i<100; i++){
-                    mockData.push( new atlas.data.Feature(new atlas.data.Point([Math.random() * 360 - 180, Math.random() * 170 - 85]), { dataset: i%2 + 1}));
-                }
-
-                source.add(mockData);
-
-                //Add a layer to render the mock data.
-                map.layers.add(new atlas.layer.BubbleLayer(source, null, {
-                    radius: 5,
-                    color: [
-                        'match',
-                        ['get', 'dataset'],
-                        1, 'rgba(255, 99, 132, 0.2)',
-                        2, 'rgba(54, 162, 235, 0.2)',
-                        'black'
-                    ],
-                    strokeColor: [
-                        'match',
-                        ['get', 'dataset'],
-                        1, 'rgb(255, 99, 132)',
-                        2, 'rgb(54, 162, 235)',
-                        'black'
-                    ]
-                }));
+                //Load some mock data for the example.
+                loadMockData();
             });
+        }
+
+        function loadMockData() {
+            //Create a data source and add it to the map.
+            var source = new atlas.source.DataSource();
+            map.sources.add(source);
+
+            //Create mock data and add to the data source.
+            var mockData = [];
+
+            for(var i=0;i<100; i++){
+                mockData.push( new atlas.data.Feature(new atlas.data.Point([Math.random() * 360 - 180, Math.random() * 170 - 85]), { dataset: i%2 + 1}));
+            }
+
+            source.add(mockData);
+
+            //Add a layer to render the mock data.
+            map.layers.add(new atlas.layer.BubbleLayer(source, null, {
+                radius: 5,
+                color: [
+                    'match',
+                    ['get', 'dataset'],
+                    1, 'rgba(255, 99, 132, 0.2)',
+                    2, 'rgba(54, 162, 235, 0.2)',
+                    'black'
+                ],
+                strokeColor: [
+                    'match',
+                    ['get', 'dataset'],
+                    1, 'rgb(255, 99, 132)',
+                    2, 'rgb(54, 162, 235)',
+                    'black'
+                ]
+            }));
         }
     </script>
     <style>

@@ -102,7 +102,7 @@ MIT License
          * @returns A string.
          */
         Utils.getString = function (val, resx, locales, numberFormat) {
-            if (val) {
+            if (typeof val !== 'undefined') {
                 if (typeof val === 'number') {
                     return val.toLocaleString(locales, numberFormat);
                 }
@@ -198,27 +198,39 @@ MIT License
          * @param elm The element to set the zoom range on.
          * @param elm2 A secondary element that the min/max zoom info should be added to, such as the dots of a carousel.
          */
-        Utils.setZoomRangeAttr = function (item, elm, elm2) {
-            elm.setAttribute('data-min-zoom', item.minZoom + '');
-            elm.setAttribute('data-max-zoom', item.maxZoom + '');
+        Utils.setZoomRangeAttr = function (item, baseOptions, elm, elm2) {
+            var minAttr = 'data-min-zoom';
+            var maxAttr = 'data-max-zoom';
+            var zoomBehaviorAttr = 'data-zoom-behavior';
+            var min = item.minZoom + '';
+            var max = item.maxZoom + '';
+            var zoomBehavior = item.zoomBehavior || baseOptions.zoomBehavior || '';
+            elm.setAttribute(minAttr, min);
+            elm.setAttribute(maxAttr, max);
+            elm.setAttribute(zoomBehaviorAttr, zoomBehavior);
             if (elm2) {
-                elm2.setAttribute('data-min-zoom', item.minZoom + '');
-                elm2.setAttribute('data-max-zoom', item.maxZoom + '');
+                elm2.setAttribute('data-min-zoom', min);
+                elm2.setAttribute('data-max-zoom', max);
+                elm2.setAttribute(zoomBehaviorAttr, zoomBehavior);
             }
         };
         /**
          * Processes the zoom range attributes of a set of elements based on a zoom level and the desired behavior.
          * @param elms The elements to process.
          * @param zoom The zoom level to process for.
-         * @param behavior The desired behavior.
          */
-        Utils.processZoomRangeAttr = function (elms, zoom, behavior) {
+        Utils.processZoomRangeAttr = function (elms, zoom) {
+            var minAttr = 'data-min-zoom';
+            var maxAttr = 'data-max-zoom';
+            var zoomBehaviorAttr = 'data-zoom-behavior';
+            var disabledCss = 'atlas-carousel-disabled-text';
             for (var i = 0; i < elms.length; i++) {
                 var elm = elms[i];
-                if (elm.hasAttribute('data-min-zoom')) {
-                    var minZoom = parseInt(elm.getAttribute('data-min-zoom'));
-                    var maxZoom = parseInt(elm.getAttribute('data-max-zoom'));
-                    var inRange = (zoom >= minZoom && zoom <= maxZoom);
+                if (elm.hasAttribute(minAttr)) {
+                    var minZoom = parseInt(elm.getAttribute(minAttr));
+                    var maxZoom = parseInt(elm.getAttribute(maxAttr));
+                    var behavior = elm.getAttribute(zoomBehaviorAttr);
+                    var inRange = (zoom >= minZoom && Math.ceil(zoom) <= maxZoom);
                     if (behavior === 'hide') {
                         elm.style.display = inRange ? '' : 'none';
                     }
@@ -230,10 +242,10 @@ MIT License
                         }
                         //Set a disabled CSS class on the element which will make text a shaded grey color.
                         if (inRange) {
-                            elm.classList.remove('atlas-carousel-disabled-text');
+                            elm.classList.remove(disabledCss);
                         }
                         else {
-                            elm.classList.add('atlas-carousel-disabled-text');
+                            elm.classList.add(disabledCss);
                         }
                     }
                 }
@@ -351,7 +363,811 @@ MIT License
             }
             return defaultValue;
         };
+        /**
+         * Gets all user defined layers from the map.
+         * @param map The map instance.
+         * @param layerFiler An array of layers to limit the search to.
+         * @returns All user defined layers from the map.
+         */
+        Utils.getMapLayers = function (map, layerFilter) {
+            var userLayers = [];
+            if (map) {
+                var mapLayers = map.layers.getLayers();
+                var layers_1 = [];
+                var filter_1 = [];
+                if (layerFilter && layerFilter.length > 0) {
+                    layerFilter.forEach(function (l) {
+                        filter_1.push((typeof l === 'string') ? l : l.getId());
+                    });
+                }
+                //Look for a drawing toolbar on the map. If there is one, grab it's drawing manager and filter out it's layers.
+                var dt_1 = azmaps.control['DrawingToolbar'];
+                if (dt_1) {
+                    map.controls.getControls().forEach(function (c) {
+                        if (c instanceof dt_1) {
+                            var l = dt_1.drawMgr.getLayers();
+                            filter_1.push(l.lineLayer.getId());
+                            filter_1.push(l.pointLayer.getId());
+                            filter_1.push(l.polygonLayer.getId());
+                            filter_1.push(l.polygonOutlineLayer.getId());
+                        }
+                    });
+                }
+                var simpleDataLayer_1 = azmaps.layer['SimpleDataLayer'];
+                mapLayers.forEach(function (l) {
+                    //@ts-ignore
+                    var id = (l.layers && l.layers.length > 0) ? l.layers[0].id : l.getId();
+                    //Handle simple data layer - filter out it's sublayers.
+                    if (simpleDataLayer_1 && l instanceof simpleDataLayer_1) {
+                        layers_1.push(l);
+                        //Remove/filter out any sub layers.
+                        var sublayers = l['getLayers']();
+                        Object.keys(sublayers).forEach(function (key) {
+                            var sl = sublayers[key];
+                            var idx = layers_1.indexOf(sl);
+                            if (idx > -1) {
+                                layers_1.splice(idx, 1);
+                            }
+                            filter_1.push(sl.getId());
+                        });
+                    }
+                    else if (!id.startsWith('microsoft.maps.')) { //Filter out all microsoft.maps layers.
+                        layers_1.push(l);
+                    }
+                });
+                //Finalize filter.
+                layers_1.forEach(function (l) {
+                    //@ts-ignore
+                    var id = (l.layers && l.layers.length > 0) ? l.layers[0].id : l.getId();
+                    if (filter_1.indexOf(id) === -1) {
+                        userLayers.push(l);
+                    }
+                });
+            }
+            return userLayers;
+        };
+        /**
+         * Determines the number of decimal places in a number.
+         * @param num Number to get decimal places for.
+         */
+        Utils.decimalPlaces = function (num) {
+            var match = ('' + num).match(/(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/);
+            if (!match) {
+                return 0;
+            }
+            return Math.max(0, 
+            // Number of digits right of decimal point.
+            (match[1] ? match[1].length : 0)
+                // Adjust for scientific notation.
+                - (match[2] ? +match[2] : 0));
+        };
+        /**
+         * Rounds a number to a specified number of decimal places.
+         * @param num The number to round.
+         * @param decimals The number of decimal places.
+         */
+        Utils.round = function (num, decimals) {
+            var factorOfTen = Math.pow(10, decimals);
+            return Math.round(num * factorOfTen) / factorOfTen;
+        };
         return Utils;
+    }());
+
+    /** Tools for processing dynamic legends. */
+    var DynamicLegend = /** @class */ (function () {
+        function DynamicLegend() {
+        }
+        /**
+         * Serializes the options of a layer used by dynamic legends as a string.
+         * @param layer Layer serialize options for.
+         */
+        DynamicLegend.serializeLayerOptions = function (layer) {
+            if (layer['getOptions']) {
+                var opt_1 = layer['getOptions']();
+                var o = {
+                    radius: opt_1.radius,
+                    color: opt_1.color,
+                    fillColor: opt_1.fillColor,
+                    fillPattern: opt_1.fillPattern,
+                    strokeColor: opt_1.strokeColor,
+                    strokeWidth: opt_1.strokeWidth,
+                    strokeGradient: opt_1.strokeGradient,
+                    image: (opt_1.iconOptions) ? opt_1.iconOptions.image : 0,
+                    minZoom: opt_1.minZoom,
+                    maxZoom: opt_1.maxZoom,
+                    visible: opt_1.visible,
+                    //OgcMapLayer
+                    activeLayers: opt_1.activeLayers
+                };
+                if (azmaps.layer['SimpleDataLayer'] && layer instanceof azmaps.layer['SimpleDataLayer']) {
+                    var s_1 = [o];
+                    var subLayers_1 = layer['getLayers']();
+                    var subLayerTypes = ['bubbleLayer', 'extrudedPolygonLayer', 'lineLayer', 'polygonLayer', 'symbolLayer'];
+                    subLayerTypes.forEach(function (sl) {
+                        var l = subLayers_1[sl];
+                        var isExtrusion = sl === 'extrudedPolygonLayer';
+                        if (l && (!isExtrusion || (isExtrusion && opt_1.allowExtrusions))) {
+                            s_1.push(DynamicLegend.serializeLayerOptions(l));
+                        }
+                    });
+                    return JSON.stringify(s_1);
+                }
+                return JSON.stringify(o);
+            }
+            return;
+        };
+        /**
+         * Parses a dynamic legend type into one or more simple legend types (Category, Gradient, or Image).
+         * @param legendType The legend type settings.
+         * @param legendControl The legend control the legend type is being used with.
+         * @returns An array of legend types
+         */
+        DynamicLegend.parse = function (legendType, legendControl) {
+            var self = DynamicLegend;
+            var legends = [];
+            var layer = Utils.getLayer(legendType.layer, legendControl._map);
+            if (layer) {
+                var azLayers = azmaps.layer;
+                var parseStyle = self._parseStyle;
+                var overrideCategoryValue = self._overrideCategoryValue;
+                var opt = {};
+                if (layer['getOptions']) {
+                    opt = layer['getOptions']();
+                }
+                if (opt.visible) {
+                    //Only create legends when there are multiple possible values for a style property (expression).
+                    if (layer instanceof azLayers.BubbleLayer) {
+                        //color
+                        parseStyle(layer, 'color', 'color', legendType, legendControl, legends);
+                        //radius
+                        var radiusLegend = parseStyle(layer, 'radius', 'scale', legendType, legendControl, legends);
+                        //If a scale legend was created for radius, double the scale size since thats a diameter.
+                        if (radiusLegend) {
+                            if (radiusLegend.type === 'category') {
+                                radiusLegend.items.forEach(function (item) {
+                                    item.shapeSize *= 2;
+                                });
+                            }
+                            //If there is a single color string set on the layer, modify the color of category.
+                            if (typeof opt.color === 'string') {
+                                overrideCategoryValue(radiusLegend, 'color', opt.color);
+                            }
+                        }
+                    }
+                    else if (layer instanceof azLayers.LineLayer) {
+                        //strokeGradient
+                        var strokeGradientLegend = parseStyle(layer, 'strokeGradient', 'color', legendType, legendControl, legends, true);
+                        //If stroke gradient is specified, stroke color is ignored by Azure Maps.
+                        if (strokeGradientLegend) {
+                            overrideCategoryValue(strokeGradientLegend, 'shape', 'line');
+                        }
+                        else {
+                            //strokeColor
+                            overrideCategoryValue(parseStyle(layer, 'strokeColor', 'color', legendType, legendControl, legends, true), 'shape', 'line');
+                        }
+                        //strokeWidth
+                        var strokeWidthLegend = parseStyle(layer, 'strokeWidth', 'scale', legendType, legendControl, legends);
+                        overrideCategoryValue(strokeWidthLegend, 'shape', 'line');
+                        if (strokeWidthLegend && !strokeGradientLegend && typeof opt.strokeColor === 'string') {
+                            overrideCategoryValue(strokeWidthLegend, 'color', opt.strokeColor);
+                        }
+                    }
+                    else if (layer instanceof azLayers.PolygonLayer || layer instanceof azLayers.PolygonExtrusionLayer) {
+                        //fillPattern
+                        var fillPatternLegend = parseStyle(layer, 'fillPattern', 'image', legendType, legendControl, legends);
+                        //If fill pattern is specified, fill color is ignored by Azure Maps.
+                        if (fillPatternLegend) {
+                            overrideCategoryValue(fillPatternLegend, 'shape', 'square');
+                        }
+                        else {
+                            //fillColor - If category legend, override shape with square if not already specified.
+                            overrideCategoryValue(parseStyle(layer, 'fillColor', 'color', legendType, legendControl, legends), 'shape', 'square');
+                        }
+                    }
+                    else if (layer instanceof azLayers.HeatMapLayer) {
+                        //color
+                        parseStyle(layer, 'color', 'color', legendType, legendControl, legends, true);
+                    }
+                    else if (layer instanceof azLayers.SymbolLayer) {
+                        var iconOptions = opt.iconOptions;
+                        if (iconOptions) {
+                            //If the image is a string, then there is only one image for the layer. 
+                            if (typeof iconOptions.image === 'string') {
+                                //Check to see if the image is scaled.
+                                if (iconOptions.size && Array.isArray(iconOptions.size)) {
+                                    //Try retrieving the image.
+                                    var img = self._getValue(iconOptions.image, 'image', legendControl);
+                                    if (img && img.shape) {
+                                        overrideCategoryValue(parseStyle(layer, 'size', 'scale', legendType, legendControl, legends), 'shape', img.shape);
+                                    }
+                                }
+                            }
+                            else {
+                                //image
+                                parseStyle(layer, 'image', 'image', legendType, legendControl, legends);
+                            }
+                        }
+                    }
+                    else if (azLayers['OgcMapLayer'] && layer instanceof azLayers['OgcMapLayer']) {
+                        //https://docs.microsoft.com/en-us/azure/azure-maps/spatial-io-add-ogc-map-layer
+                        //https://github.com/Azure-Samples/AzureMapsCodeSamples/blob/master/AzureMapsCodeSamples/Spatial%20IO%20Module/OGC%20Web%20Map%20Service%20explorer.html
+                        var l = layer;
+                        //Monitor for when the active layers change.
+                        l.onActiveLayersChanged = function (ogcLayer) {
+                            if (!ogcLayer._client._capabilities) {
+                                ogcLayer.getCapabilities().then(function (cap) {
+                                    if (cap) {
+                                        legendControl._rebuildContainer();
+                                    }
+                                });
+                            }
+                            else {
+                                legendControl._rebuildContainer();
+                            }
+                        };
+                        var defaultImage_1 = legendType.defaultImage || {};
+                        var activeLayers = opt.activeLayers;
+                        var client = l._client;
+                        //If there is no client or capabilities, these need to be loaded.
+                        if (client && client._capabilities && activeLayers) {
+                            var sublayers_1 = client._capabilities.sublayers;
+                            if (sublayers_1) {
+                                activeLayers.forEach(function (al) {
+                                    for (var i = 0; i < sublayers_1.length; i++) {
+                                        if ((typeof al === 'string' && al === sublayers_1[i].id) || al.id === sublayers_1[i].id) {
+                                            var styles = al.styles;
+                                            if (styles && styles.length > 0 && styles[0].legendUrl && styles[0].legendUrl !== '') {
+                                                legends.push({
+                                                    type: 'image',
+                                                    url: styles[0].legendUrl.replace(/\&amp;/g, '&'),
+                                                    subtitle: al.title || al.subtitle || sublayers_1[i].id || '',
+                                                    footer: al.description || al.abstract || '',
+                                                    minZoom: al.minZoom,
+                                                    maxZoom: al.maxZoom,
+                                                    maxHeight: defaultImage_1.maxHeight,
+                                                    maxWidth: defaultImage_1.maxWidth
+                                                });
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    else if (azLayers['SimpleDataLayer'] && layer instanceof azLayers['SimpleDataLayer']) ;
+                }
+            }
+            return legends;
+        };
+        /**
+         * Generates a legend type settings for a layers style property.
+         * @param property The style property to parse.
+         * @param type The type of style property being parsed.
+         * @param legendType The parent legend type.
+         * @param legendControl The legend control.
+         * @param legends The array of legends that have been created.
+         * @param overrideLabels Specifies if labels should be overriden
+         * @returns The generated legend incase any post-processing is needed.
+         */
+        DynamicLegend._parseStyle = function (layer, property, type, legendType, legendControl, legends, overrideLabels) {
+            if (layer['getOptions']) {
+                var self_1 = DynamicLegend;
+                var opt = layer['getOptions']();
+                var exp = opt[property];
+                if (!exp && opt.iconOptions && property === 'image' && type === 'image') {
+                    exp = opt.iconOptions[property];
+                }
+                if (self_1._isExp(exp)) {
+                    var l = void 0;
+                    switch (exp[0]) {
+                        case 'step':
+                            l = self_1._parseStep(layer, exp, type, legendType, legendControl);
+                            break;
+                        case 'match':
+                            l = self_1._parseMatch(layer, exp, type, legendType, legendControl);
+                            break;
+                        case 'interpolate': //color, scale
+                            l = self_1._parseInterpolation(layer, exp, type, legendType);
+                            break;
+                    }
+                    if (l) {
+                        switch (l.type) {
+                            case 'category':
+                                if (legendType.defaultCategory) {
+                                    Object.assign(l, legendType.defaultCategory);
+                                }
+                                break;
+                            case 'gradient':
+                                if (overrideLabels) {
+                                    var lg = l;
+                                    lg.stops.forEach(function (stop) {
+                                        stop.label = undefined;
+                                    });
+                                    lg.stops[0].label = 'low';
+                                    lg.stops[lg.stops.length - 1].label = 'high';
+                                }
+                                if (legendType.defaultGradient) {
+                                    Object.assign(l, legendType.defaultGradient);
+                                }
+                                break;
+                            case 'image':
+                                if (legendType.defaultImage) {
+                                    Object.assign(l, legendType.defaultImage);
+                                }
+                                break;
+                        }
+                        if (typeof opt.minZoom === 'number') {
+                            l.minZoom = opt.minZoom;
+                        }
+                        if (typeof opt.maxZoom === 'number') {
+                            l.maxZoom = opt.maxZoom;
+                        }
+                        l.cssClass = legendType.cssClass;
+                        legends.push(l);
+                        return l;
+                    }
+                }
+            }
+            return;
+        };
+        /**
+          * Parses a `step` expression into a legend type.
+          * @param exp Expression to parse.
+          * @param type The type of style property the expression is for.
+          * @param legendType The dynamic legend type settings.
+          * @param legendControl The legend control the legend is for.
+          * @returns A legend type or null.
+          */
+        DynamicLegend._parseStep = function (layer, exp, type, legendType, legendControl) {
+            /*
+             ["step",
+                input: number,
+                base_output: number | string,
+                stop_input_1: number, stop_output_1: number | string,
+                stop_input_n: number, stop_output_n: number | string, ...
+            ]
+
+            [
+                'step',
+                ['get', 'traffic_level'],
+                '#6B0512', //Dark red
+                0.01, '#EE2F53', //Red
+                0.8, 'orange', //Orange
+                1, "#66CC99" //Green
+            ]
+            */
+            //type == color -> stepped gradient, type == scale -> category, type == image -> category  
+            if (exp.length >= 5 && exp.length % 2 === 1) {
+                var self_2 = DynamicLegend;
+                var getString = Utils.getString;
+                //Category legend.
+                var items = [];
+                var len = exp.length;
+                var base = exp[2];
+                var opt = legendControl.getOptions();
+                var resx = opt.resx;
+                if (((type === 'color' || type === 'image') && typeof base !== 'string') ||
+                    (type === 'scale' && typeof base !== 'number')) {
+                    return;
+                }
+                //Base item.
+                var baseItem = self_2._getValue(base, type, legendControl);
+                if (!baseItem) {
+                    return;
+                }
+                var defaultCategory = legendType.defaultCategory;
+                var numberFormat = void 0;
+                var numberFormatLocales = void 0;
+                if (defaultCategory) {
+                    numberFormat = defaultCategory.numberFormat;
+                    numberFormatLocales = defaultCategory.numberFormatLocales;
+                }
+                var lastLabel = getString(exp[3], resx, numberFormatLocales, numberFormat);
+                baseItem.label = '<' + lastLabel;
+                items.push(baseItem);
+                //Stop items.
+                for (var i = 3; i < len; i += 2) {
+                    var stop_1 = self_2._getValue(exp[i + 1], type, legendControl);
+                    if (!stop_1) {
+                        return;
+                    }
+                    stop_1.label = getString(exp[i], resx, numberFormatLocales, numberFormat);
+                    if (i === len - 2) {
+                        stop_1.label = '>' + lastLabel;
+                    }
+                    else {
+                        var l = getString(exp[i + 2], resx, numberFormatLocales, numberFormat);
+                        stop_1.label = lastLabel + " - " + l;
+                        lastLabel = l;
+                    }
+                    items.push(stop_1);
+                }
+                return {
+                    type: 'category',
+                    items: items,
+                    subtitle: legendType.subtitle || self_2._getSubtitle(legendType.subtitleFallback, exp[1], layer),
+                    footer: legendType.footer || self_2._getFooter(legendType.footerFallback, layer),
+                    //Prefer descending order when displaying colors or scales, as it looks nicer.
+                    layout: type !== 'image' ? 'column-reverse' : 'column',
+                    //Prefer to collapse the space around the shapes when displaying color.
+                    collapse: type === 'color'
+                };
+            }
+        };
+        /**
+         * Parses a `match` expression into a legend type.
+         * @param exp Expression to parse.
+         * @param type The type of style property the expression is for.
+         * @param legendType The dynamic legend type settings.
+         * @param legendControl The legend control the legend is for.
+         * @returns A legend type or null.
+         */
+        DynamicLegend._parseMatch = function (layer, exp, type, legendType, legendControl) {
+            /*
+                Partial, labels with number/string arrays not supported.
+
+                "no data" value will be used as label for fallback. Add a "no data" key to the resx to override label text.
+
+                [
+                    'match',
+                    input: number | string,
+                    label1: number | string,
+                    output1: value,
+                    label2: number | string,
+                    output2: value,
+                    ...,
+                    fallback: value
+                ]
+        
+                [
+                    'match',
+                    ['get', 'magnitude'],
+                    1, 'green',
+                    2, 'orange',
+                    3, 'red',
+                    'gray'
+                ]
+        
+                [
+                    'match',
+        
+                    ['get', 'EntityType'],
+        
+                    //For each entity type, specify the icon name to use.
+                    'Gas Station', 'gas_station_icon',
+                    'Grocery Store', 'grocery_store_icon',
+                    'Restaurant', 'restaurant_icon',
+                    'School', 'school_icon',
+        
+                    //Default fallback icon.
+                    'marker-blue'
+                ]
+            */
+            if (exp.length >= 5 && exp.length % 2 === 1) {
+                //Category legend for all types.
+                var self_3 = DynamicLegend;
+                var items = [];
+                //Stop items.
+                for (var i = 2, len = exp.length - 1; i < len; i += 2) {
+                    var stop_2 = self_3._getValue(exp[i + 1], type, legendControl);
+                    if (!stop_2) {
+                        return;
+                    }
+                    stop_2.label = exp[i];
+                    items.push(stop_2);
+                }
+                //Fallback item.
+                var fallback = self_3._getValue(exp[exp.length - 1], type, legendControl);
+                if (!stop) {
+                    return;
+                }
+                fallback.label = 'no data';
+                items.push(fallback);
+                return {
+                    type: 'category',
+                    items: items,
+                    subtitle: legendType.subtitle || self_3._getSubtitle(legendType.subtitleFallback, exp[1], layer),
+                    footer: legendType.footer || self_3._getFooter(legendType.footerFallback, layer),
+                    //Prefer to collapse the space around the shapes when displaying color.
+                    collapse: type === 'color'
+                };
+            }
+        };
+        /**
+         * Parses an `interpolation` expression into a legend type.
+         * @param exp Expression to parse.
+         * @param type The type of style property the expression is for.
+         * @param legendType The dynamic legend type settings.
+         * @returns A legend type or null.
+         */
+        DynamicLegend._parseInterpolation = function (layer, exp, type, legendType) {
+            /*
+                Supports only linear and exponential interpolation. "cubic-bezier" interpolation not supported.
+
+                type == color -> gradient
+                type == scale -> category
+
+                ["interpolate",
+                    interpolation: ["linear"] | ["exponential", base],
+                    input: number,
+                    stop_input_1: number, stop_output_1: OutputType,
+                    stop_input_n: number, stop_output_n: OutputType, ...
+                ]
+
+                [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'PopChange' + i],
+                    -maxScale, 'rgb(255,0,255)',       // Magenta
+                    -maxScale / 2, 'rgb(0,0,255)',     // Blue
+                    0, 'rgb(0,255,0)',                 // Green
+                    maxScale / 2, 'rgb(255,255,0)',    // Yellow
+                    maxScale, 'rgb(255,0,0)'           // Red
+                ]
+        
+                 [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'mag'],
+                    0, 'green',
+                    5, 'yellow',
+                    6, 'orange',
+                    7, 'red'
+                ]
+            */
+            if (exp.length >= 7 && exp.length % 2 === 1) {
+                var self_4 = DynamicLegend;
+                var subtitle = legendType.subtitle || self_4._getSubtitle(legendType.subtitleFallback, exp[2], layer);
+                var footer = legendType.footer || self_4._getFooter(legendType.footerFallback, layer);
+                var minLabel = exp[3];
+                var maxLabel = exp[exp.length - 2];
+                if (type === 'color') { //Gradient legend
+                    var interpFn = self_4._getInterpFn(exp[1], minLabel, maxLabel);
+                    if (interpFn) {
+                        var stops = [];
+                        var lastOffset = -1;
+                        //The minimum offset space required between labels. Doing this to reduce label collision.
+                        var minLabelOffset = 0.05;
+                        for (var i = 3, len = exp.length; i < len; i += 2) {
+                            //Get a value between 0 and 1.
+                            var label = exp[i];
+                            var output = exp[i + 1];
+                            if (typeof output !== 'string') {
+                                return;
+                            }
+                            var offset = interpFn(label);
+                            //If the space between offsets is too small, don't add the label.
+                            if (offset - lastOffset < minLabelOffset) {
+                                label = undefined;
+                                lastOffset = offset;
+                            }
+                            stops.push({
+                                offset: offset,
+                                label: label,
+                                color: output
+                            });
+                        }
+                        return {
+                            type: 'gradient',
+                            stops: stops,
+                            subtitle: subtitle,
+                            footer: footer
+                        };
+                    }
+                }
+                else if (type === 'scale') { //Category legend
+                    var items = [];
+                    for (var i = 3, len = exp.length; i < len; i += 2) {
+                        //Get a value between 0 and 1.
+                        var label = exp[i];
+                        var output = exp[i + 1];
+                        if (typeof output !== 'number') {
+                            return;
+                        }
+                        items.push({
+                            shapeSize: (output === 0) ? 0.01 : output,
+                            label: label
+                        });
+                    }
+                    //When there are only two items in the scale, add a mid-point otherwise there is no way to know the difference between linear and exponential.
+                    if (exp.length === 7) {
+                        //Calculate mid-point.
+                        var dx = maxLabel - minLabel;
+                        var midLabel = minLabel + dx / 2;
+                        var interpFn = self_4._getInterpFn(exp[1], minLabel, maxLabel);
+                        var minOutput = exp[4];
+                        var maxOutput = exp[6];
+                        var midOutput = interpFn(midLabel) * (maxOutput - minOutput) + minOutput;
+                        //Allow one extra decimal place from existing labels since we divided by two earlier.
+                        midLabel = Utils.round(midLabel, Math.max(Utils.decimalPlaces(minLabel), Utils.decimalPlaces(maxLabel)) + 1);
+                        //Insert before last item.
+                        items.splice(items.length - 1, 0, {
+                            shapeSize: midOutput,
+                            label: midLabel
+                        });
+                    }
+                    //Prefer that when displaying scales, should in descending order as it looks nicer.
+                    return {
+                        type: 'category',
+                        items: items,
+                        layout: 'column-reverse',
+                        subtitle: subtitle,
+                        footer: footer,
+                        fitItems: true
+                    };
+                }
+                //type = image - not supported.
+            }
+            return;
+        };
+        /**
+         * Parses a simple input getter of an expression.
+         * @param input The input expression.
+         * @returns The getter property name.
+         */
+        DynamicLegend._parseInputGetter = function (input) {
+            if (Array.isArray(input) && input[0] === 'get' && typeof input[1] === 'string') {
+                return input[1];
+            }
+            return;
+        };
+        /**
+         * Returns a function that processes an interpolation on a value.
+         * @param interpExp The interpolation expression.
+         * @param values The data range values.
+         * @returns A function that processes an interpolation on a value.
+         */
+        DynamicLegend._getInterpFn = function (interpExp, minValue, maxValue) {
+            //["linear"] | ["exponential", base] | ["cubic-bezier", x1, y1, x2, y2]
+            var type = interpExp[0];
+            var difference = maxValue - minValue;
+            if (difference === 0) {
+                return function (x) {
+                    return 0;
+                };
+            }
+            if (type === 'linear') {
+                return function (x) {
+                    var progress = (x - minValue);
+                    return progress / difference;
+                };
+            }
+            else if (type === 'exponential') {
+                var base_1 = interpExp[1];
+                return function (x) {
+                    var progress = (x - minValue);
+                    return (Math.pow(base_1, progress) - 1) / (Math.pow(base_1, difference) - 1);
+                };
+            }
+            return;
+        };
+        /**
+         * Determines if an object is possibly an expression.
+         * @param obj An object to check.
+         * @returns Boolean indicating if object likely an expression or not.
+         */
+        DynamicLegend._isExp = function (obj) {
+            return (obj && Array.isArray(obj) && obj.length > 0 && typeof obj[0] === 'string');
+        };
+        /**
+         * Overrides a property on a category legend type.
+         * @param legend The legend type.
+         * @param property The property of the legend type to override.
+         * @param value The value to set.
+         */
+        DynamicLegend._overrideCategoryValue = function (legend, property, value) {
+            //Check if legend exists, is category type, and doesn't already have the property value defined.
+            if (legend && legend.type === 'category' && !legend[property]) {
+                legend[property] = value;
+            }
+        };
+        /**
+         * Takes a raw value, validates, and sets it correctly on the appropriate CategoryItem property depending on the type of style property the value is for.
+         * @param val The raw value to retrieve.
+         * @param type The type of style property the value is for.
+         * @param legendControl The legend control.
+         * @returns A simple CategoryItem or null.
+         */
+        DynamicLegend._getValue = function (val, type, legendControl) {
+            var value;
+            var isString = typeof val === 'string';
+            if (type === 'color' && isString) {
+                value = { color: val };
+            }
+            else if (type === 'scale' && typeof val === 'number') {
+                value = { shapeSize: val === 0 ? 0.01 : val };
+            }
+            else if (type === 'image' && isString && legendControl._map) {
+                var img = this._getImage(legendControl._map, val);
+                if (img) {
+                    value = { shape: img };
+                }
+            }
+            return value;
+        };
+        /**
+         * Tries to retrieve the image source for an image in the maps image sprite.
+         * @param map A map instance.
+         * @param imgName The name of the image.
+         * @returns Image source string, or null.
+         */
+        DynamicLegend._getImage = function (map, imgName) {
+            if (map && imgName !== 'none') {
+                //Check user defined images.
+                if (map.imageSprite.hasImage(imgName)) {
+                    //@ts-ignore
+                    return map.imageSprite.userImages.get(imgName).src;
+                }
+                //Try built in images. 
+                var template = void 0;
+                var color = void 0;
+                if (imgName.startsWith('marker')) {
+                    template = 'marker';
+                    color = imgName.replace('marker-', '');
+                }
+                else if (imgName.startsWith('pin-round')) {
+                    template = 'pin-round';
+                    color = imgName.replace('pin-round-', '');
+                }
+                else if (imgName.startsWith('pin')) {
+                    template = 'pin';
+                    color = imgName.replace('pin-', '');
+                }
+                if (template) {
+                    var defaultColors = {
+                        'black': '#231f20',
+                        'blue': '#1a73aa',
+                        'darkblue': '#003963',
+                        'red': '#ef4c4c',
+                        'yellow': '#f2c851'
+                    };
+                    color = defaultColors[color];
+                    if (color) {
+                        return azmaps.getImageTemplate(template, 1).replace(/{color}/g, color).replace(/{secondaryColor}/g, '#fff').replace(/{text}/g, '');
+                    }
+                }
+            }
+            return;
+        };
+        /**
+         * Gets a subtitle string value.
+         * @param method The extraction method.
+         * @param expression An expression to try and extract the property name from.
+         * @param layer The layer.
+         * @returns
+         */
+        DynamicLegend._getSubtitle = function (method, exp, layer) {
+            method = method || 'auto';
+            if (method === 'none') {
+                return;
+            }
+            var metadata = layer.metadata || {};
+            var id = layer.getId();
+            if (method === 'auto') {
+                return metadata['title'] || metadata['subtitle'] || id;
+            }
+            else if (method === 'expression') {
+                return this._parseInputGetter(exp) || id;
+            }
+            return metadata[method] || '';
+        };
+        /**
+         * Gets a footer string value.
+         * @param method The extraction method.
+         * @param layer The layer.
+         */
+        DynamicLegend._getFooter = function (method, layer) {
+            method = method || 'auto';
+            var metadata = layer.metadata || {};
+            if (method === 'auto') {
+                return metadata['footer'] || metadata['description'] || metadata['abstract'] || '';
+            }
+            else if (method !== 'none') {
+                return metadata[method] || '';
+            }
+            return;
+        };
+        return DynamicLegend;
     }());
 
     var BaseControl = /** @class */ (function (_super) {
@@ -374,16 +1190,29 @@ MIT License
                 layout: 'carousel',
                 style: 'light',
                 visible: true,
-                zoomRangeBehavior: 'hide',
+                zoomBehavior: 'hide',
                 showToggle: true,
                 minimized: false
             };
             _this._currentIdx = 0;
             _this._hasZoomableContent = false;
             _this._btnRotation = 0;
+            _this._controlCount = 0;
             /****************************
              * Private Methods
              ***************************/
+            _this._checkControlCount = function () {
+                var self = _this;
+                var map = self._map;
+                if (map) {
+                    var cnt = map.controls.getControls().length;
+                    if (self._controlCount !== cnt) {
+                        self._controlCount = cnt;
+                        //Ensure control fits.
+                        self._adjustSize();
+                    }
+                }
+            };
             /**
              * Event handler for when the map zoom level has changed.
              * Layer options are disabled when zoom outside of their min/max zoom level.
@@ -394,20 +1223,20 @@ MIT License
                 var opt = self._baseOptions;
                 if (content) {
                     if (self._hasZoomableContent) {
-                        var zoom = Math.round(self._map.getCamera().zoom);
-                        var zoomRangeBehavior = opt.zoomRangeBehavior;
+                        var zoom = self._map.getCamera().zoom;
                         //Will either be the first visible legend, or the current index.
                         var fallbackIdx = void 0;
-                        var cards = content.getElementsByClassName('atlas-layer-legend-card');
+                        var cards = content.querySelectorAll('.atlas-layer-legend-card');
                         var handles = content.querySelectorAll('.atlas-carousel-dot, .atlas-accordion-button');
                         for (var i = 0; i < cards.length; i++) {
                             var card = cards[i];
                             var idx = parseInt(card.getAttribute('rel'));
                             var minZoom = parseInt(card.getAttribute('data-min-zoom'));
                             var maxZoom = parseInt(card.getAttribute('data-max-zoom'));
-                            var inRange = (zoom >= minZoom && zoom <= maxZoom);
+                            var zoomBehavior = card.getAttribute('data-zoom-behavior');
+                            var inRange = (zoom >= minZoom && Math.ceil(zoom) <= maxZoom);
                             var display = (inRange) ? '' : 'none';
-                            if (zoomRangeBehavior === 'hide') {
+                            if (zoomBehavior === 'hide') {
                                 if (opt.layout === 'carousel' || opt.layout === 'accordion') {
                                     if (handles.length > 0) {
                                         //Handles only exist in carousel and accordion mode.
@@ -424,9 +1253,9 @@ MIT License
                             }
                             //Need to apply similar logic to state items which are wrapped as a label or option.
                             var elms = card.querySelectorAll('label, option');
-                            Utils.processZoomRangeAttr(elms, zoom, zoomRangeBehavior);
+                            Utils.processZoomRangeAttr(elms, zoom);
                         }
-                        if (zoomRangeBehavior === 'hide') {
+                        if (opt.zoomBehavior === 'hide') {
                             //Case when there is no layers visible, hide the layer control, but only if it is meant to be visible.
                             if (opt.visible && !opt.minimized) {
                                 content.style.display = (typeof fallbackIdx === 'undefined') ? 'none' : '';
@@ -441,6 +1270,68 @@ MIT License
                         content.style.display = '';
                     }
                 }
+            };
+            /**
+             * Rebuilds the container.
+             */
+            _this._rebuildContainer = function () {
+                var self = _this;
+                var opt = self._baseOptions;
+                var container = self._container;
+                self._createContent();
+                self._setStyle(opt.style);
+                var content = self._content;
+                if (!opt.visible) {
+                    container.style.display = 'none';
+                    content.style.display = 'none';
+                }
+                if (!opt.container) {
+                    if (self._btn) {
+                        self._btn.remove();
+                    }
+                    //Create expansion button.
+                    var btnStyle = {
+                        display: opt.showToggle ? '' : 'none',
+                        backgroundColor: self._bgColor
+                    };
+                    var rotation = 90;
+                    var position = self._controlPosition;
+                    if (!position || position === 'non-fixed') {
+                        position = 'top-left';
+                    }
+                    var isLeft = position.indexOf('left') > -1;
+                    var isTop = position.indexOf('top') > -1;
+                    if (isTop) {
+                        btnStyle.bottom = '0';
+                        rotation = isLeft ? 180 : 270;
+                    }
+                    else {
+                        btnStyle.top = '0';
+                        rotation = isLeft ? 90 : 0;
+                    }
+                    if (isLeft) {
+                        btnStyle.right = '0';
+                    }
+                    else {
+                        btnStyle.left = '0';
+                    }
+                    btnStyle.transform = "rotate(" + rotation + "deg)";
+                    self._btnRotation = rotation;
+                    container.onclick = self._contentBtnClicked;
+                    var btn = document.createElement("button");
+                    btn.setAttribute('type', 'button');
+                    btn.classList.add('atlas-layer-legend-expand-btn');
+                    Object.assign(btn.style, btnStyle);
+                    btn.addEventListener('click', self._toggle);
+                    container.appendChild(btn);
+                    var ariaLabel = self._localization[self._nameIdx] + ' - ' + self._localization[3]; //Collapse
+                    btn.setAttribute('title', ariaLabel);
+                    btn.setAttribute('alt', ariaLabel);
+                    self._btn = btn;
+                    self._setBtnState();
+                }
+                self._mapZoomChanged(null);
+                self._adjustSize();
             };
             /**
             * An event handler for when the map style changes. Used when control style is set to auto.
@@ -468,11 +1359,20 @@ MIT License
             /**
              * Toggle event handler for expand/collapse button.
              */
-            _this._toggle = function () {
+            _this._toggle = function (e) {
                 var self = _this;
                 var opt = self._baseOptions;
                 opt.minimized = !opt.minimized;
                 self._setBtnState();
+                e.stopPropagation();
+                e.preventDefault();
+                return false;
+            };
+            /** Event handler for when collapsed container is clicked. */
+            _this._contentBtnClicked = function (e) {
+                if (_this._baseOptions.minimized) {
+                    _this._toggle(e);
+                }
             };
             var self = _this;
             self._nameIdx = nameIdx;
@@ -526,16 +1426,17 @@ MIT License
             self._rebuildContainer();
             if (typeof self._baseOptions.visible !== 'undefined') {
                 var display = (self._baseOptions.visible) ? '' : 'none';
-                if (self._container) {
-                    self._container.style.display = display;
+                if (container) {
+                    container.style.display = display;
                 }
                 if (self._content) {
                     self._content.style.display = display;
                 }
             }
+            self._controlWatcher = setInterval(self._checkControlCount, 1000);
             map.events.add('zoomend', self._mapZoomChanged);
             self._mapZoomChanged(null);
-            return self._container;
+            return container;
         };
         /**
         * Action to perform when control is removed from the map.
@@ -549,6 +1450,10 @@ MIT License
             if (self._container) {
                 self._container.remove();
                 self._container = null;
+            }
+            if (self._controlWatcher) {
+                clearInterval(self._controlWatcher);
+                self._controlWatcher = null;
             }
             var map = self._map;
             if (map) {
@@ -572,8 +1477,8 @@ MIT License
                 opt.style = options.style;
                 self._setStyle(options.style);
             }
-            if (options.zoomRangeBehavior !== undefined) {
-                opt.zoomRangeBehavior = options.zoomRangeBehavior;
+            if (options.zoomBehavior !== undefined) {
+                opt.zoomBehavior = options.zoomBehavior;
                 self._needsRebuild = true;
             }
             if (options.visible !== undefined) {
@@ -636,6 +1541,8 @@ MIT License
                 content.appendChild(card);
             }
             else {
+                //Ensure to fallback incase user passed in bad value.
+                self._baseOptions.layout = 'list';
                 content.appendChild(card);
             }
             if (handle) {
@@ -656,89 +1563,85 @@ MIT License
                 }
             }
             //Store min/max zoom info as attributes.
-            Utils.setZoomRangeAttr(item, card, handle);
+            Utils.setZoomRangeAttr(item, self._baseOptions, card, handle);
         };
-        /**
-         * Rebuilds the container.
-         */
-        BaseControl.prototype._rebuildContainer = function () {
+        BaseControl.prototype._adjustSize = function () {
             var self = this;
             var opt = self._baseOptions;
-            self._createContent();
-            self._setStyle(opt.style);
-            if (!opt.visible) {
-                self._container.style.display = 'none';
-                self._content.style.display = 'none';
-            }
-            if (!opt.container) {
-                if (self._btn) {
-                    self._btn.remove();
-                }
-                //Create expansion button.
-                var btnStyle = {
-                    display: opt.showToggle ? '' : 'none',
-                    backgroundColor: self._bgColor
-                };
-                var rotation = 90;
-                var position = self._controlPosition;
-                if (!position || position === 'non-fixed') {
-                    position = 'top-left';
-                }
-                var isLeft = position.indexOf('left') > -1;
-                var isTop = position.indexOf('top') > -1;
-                if (isTop) {
-                    btnStyle.bottom = '0';
-                    rotation = isLeft ? 180 : 270;
-                }
-                else {
-                    btnStyle.top = '0';
-                    rotation = isLeft ? 90 : 0;
-                }
-                if (isLeft) {
-                    btnStyle.right = '0';
-                }
-                else {
-                    btnStyle.left = '0';
-                }
-                btnStyle.transform = "rotate(" + rotation + "deg)";
-                self._btnRotation = rotation;
-                var btn = document.createElement("button");
-                btn.setAttribute('type', 'button');
-                btn.classList.add('atlas-layer-legend-expand-btn');
-                Object.assign(btn.style, btnStyle);
-                btn.addEventListener('click', self._toggle);
-                self._container.appendChild(btn);
-                self._btn = btn;
-                self._setBtnState();
-            }
-            self._mapZoomChanged(null);
+            var container = self._container;
             if (self._map) {
-                //When added to the map, don't let the control be more than 75% of the height of the map, and 100% map width, minus 20 pixels to account for margins..
-                var maxWidth = 'unset';
-                var maxHeight = 'unset';
-                if (!self._baseOptions.container) {
+                var maxWidth_1 = 'unset';
+                var maxHeight_1 = 'unset';
+                //When legend is displayed within the map, need to restrict the size of the legend content.
+                if (!opt.container) {
                     var rect = self._map.getCanvasContainer().getClientRects()[0];
-                    maxHeight = rect.height * 0.75 + 'px';
-                    maxWidth = (rect.width - 20) + 'px';
+                    //Subtract 20 pixels to account for padding around controls in the map.
+                    maxWidth_1 = (rect.width - 20) + 'px';
+                    var maxContainerHeight = rect.height - 20;
+                    var cp = self._controlPosition;
+                    if (cp && cp !== '' && cp !== 'non-fixed') {
+                        var side_1 = (cp.indexOf('left') > -1) ? 'left' : 'right';
+                        //Determine how many controls exist in the same position.
+                        var cnt_1 = 0;
+                        //@ts-ignore
+                        var controlContainers = self._map.controls.controlContainer.children;
+                        Array.from(controlContainers).forEach(function (c) {
+                            if (c.className.indexOf(side_1) > -1) {
+                                cnt_1 += c.children.length;
+                            }
+                        });
+                        if (cnt_1 > 1) {
+                            //Account for this control.
+                            cnt_1--;
+                            //Account for legend control which we know uses a non-fixed position but is in the bottom right corner of the map.
+                            if (cp.indexOf('right') > -1) {
+                                cnt_1++;
+                            }
+                            //Give all other controls 35px space (button size), and 20px map padding.
+                            maxContainerHeight = Math.min(maxContainerHeight, rect.height - cnt_1 * 35 - 20);
+                        }
+                    }
+                    //Set the max height of the container to 75% of the maps height, or the height minus 20 pixels, whichever is smaller.
+                    Object.assign(container.style, {
+                        maxHeight: maxContainerHeight + 'px',
+                        maxWidth: maxWidth_1
+                    });
+                    if (opt.layout === 'accordion') {
+                        //Need to account for additional height to account fro button size. Give 30px per button and 20px for the title.
+                        var accordBtns = container.querySelectorAll('.atlas-accordion-button');
+                        maxContainerHeight = (maxContainerHeight - accordBtns.length * 30 - 20);
+                        maxHeight_1 = maxContainerHeight + 'px';
+                    }
+                    else if (opt.layout === 'carousel') {
+                        //Need to account for legend title and dot container height (height - 110px).
+                        maxContainerHeight = rect.height - 110;
+                        maxHeight_1 = maxContainerHeight + 'px';
+                    }
+                    if (maxContainerHeight <= 40) {
+                        maxHeight_1 = 'unset';
+                    }
+                    var cardContainers = container.querySelectorAll('.atlas-layer-legend-card');
+                    cardContainers.forEach(function (cc) {
+                        Object.assign(cc.style, {
+                            maxHeight: maxHeight_1,
+                            maxWidth: maxWidth_1
+                        });
+                    });
                 }
-                Object.assign(self._container.style, {
-                    maxHeight: maxHeight,
-                    maxWidth: maxWidth
-                });
             }
         };
         /** Sets the style of the control. */
         BaseControl.prototype._setStyle = function (style) {
             if (style) {
                 var self_1 = this;
-                var map = self_1._map;
-                if (map) {
+                var map_1 = self_1._map;
+                if (map_1) {
                     if (style.startsWith('auto') && !self_1._hclStyle) {
-                        map.events.add('styledata', self_1._mapStyleChanged);
+                        map_1.events.add('styledata', self_1._mapStyleChanged);
                         self_1._setColorFromMapStyle();
                     }
                     else {
-                        map.events.remove('styledata', self_1._mapStyleChanged);
+                        map_1.events.remove('styledata', self_1._mapStyleChanged);
                         self_1._setControlColor(style);
                     }
                 }
@@ -909,15 +1812,13 @@ MIT License
                 var w = '32px';
                 var h = '32px';
                 var display = 'none';
-                var r = self._btnRotation;
                 var showBtnBg = false;
-                var ariaLabelIdx = 3; //Collapse
+                var ariaLabel = self._localization[self._nameIdx];
                 //If toggle button isn't being to be displayed, then don't allow minimizing.
                 var minimized = (opt.minimized && opt.showToggle);
                 if (minimized) {
                     showBtnBg = true;
-                    r = (r + 180) % 360;
-                    ariaLabelIdx = 2; //Expand
+                    ariaLabel += ' - ' + self._localization[2]; //Expand 
                 }
                 else {
                     display = '';
@@ -925,34 +1826,34 @@ MIT License
                     w = 'unset';
                 }
                 btn.setAttribute('aria-expanded', !minimized + '');
-                if (self._container) {
+                var container = self._container;
+                if (container) {
                     //Hide/show the content.
                     if (self._content && opt.visible) {
                         self._content.style.display = display;
                     }
-                    var classList = self._container.classList;
+                    container.setAttribute('aria-expanded', !minimized + '');
+                    var classList = container.classList;
                     if (showBtnBg) {
                         if (!classList.contains(btnCss)) {
                             classList.add(btnCss);
                         }
+                        btn.style.display = 'none';
+                        container.style.cursor = 'pointer';
                     }
                     else {
                         classList.remove(btnCss);
+                        btn.style.display = '';
+                        container.style.cursor = '';
                     }
-                    //Rotate the button.
-                    btn.style.transform = "rotate(" + r + "deg)";
+                    container.setAttribute('title', ariaLabel);
+                    container.setAttribute('alt', ariaLabel);
                     //Resize the container to be the size of a button.
-                    Object.assign(self._container.style, {
+                    Object.assign(container.style, {
                         height: h,
                         width: w
                     });
-                    if (self._content && opt.visible) {
-                        self._content.style.display = display;
-                    }
                 }
-                var ariaLabel = self._localization[ariaLabelIdx];
-                btn.setAttribute('title', ariaLabel);
-                btn.setAttribute('alt', ariaLabel);
                 if (opt.minimized !== minimized) {
                     //@ts-ignore
                     self._invokeEvent('toggled', {
@@ -1029,12 +1930,31 @@ MIT License
                 style: 'light',
                 visible: true,
                 legends: [],
-                zoomRangeBehavior: 'hide',
+                zoomBehavior: 'hide',
                 showToggle: true,
                 minimized: false
             };
             _this._legendIdx = 0;
             _this._currentLegend = null;
+            _this._layerOptCache = {};
+            _this._styleDataChanged = function () {
+                var self = _this;
+                var layerOptCache = self._layerOptCache;
+                var map = self._map;
+                //Loop through monitored layers and if any of their options have changed, rebuild legend.
+                var needsRebuild = false;
+                Object.keys(layerOptCache).forEach(function (key) {
+                    var l = map.layers.getLayerById(key);
+                    var opt = layerOptCache[key];
+                    var opt2 = DynamicLegend.serializeLayerOptions(l);
+                    if (opt !== opt2) {
+                        needsRebuild = true;
+                    }
+                });
+                if (needsRebuild) {
+                    self._rebuildContainer();
+                }
+            };
             _this.setOptions(options);
             return _this;
         }
@@ -1061,7 +1981,7 @@ MIT License
                         case 'visible':
                         case 'container':
                         case 'layout':
-                        case 'zoomRangeBehavior':
+                        case 'zoomBehavior':
                             //@ts-ignore
                             opt[key] = val;
                             break;
@@ -1087,7 +2007,7 @@ MIT License
                                 l.minZoom = Utils.getNumber(l, 'minZoom', 0, 0);
                                 l.maxZoom = Utils.getNumber(l, 'maxZoom', 0, 24);
                                 //Only consider data zoomable if the zoom range is not the max range of 0 to 24.
-                                if (l.minZoom !== 0 || l.maxZoom !== 24) {
+                                if (l.minZoom !== 0 || l.maxZoom !== 24 || l.type === 'dynamic') {
                                     hasZoomRange_1 = true;
                                 }
                             });
@@ -1119,7 +2039,7 @@ MIT License
          * @param legend The legend to add.
          * @param show A boolean indicating if this legend should be displayed.
          */
-        LegendControl.prototype.add = function (legend, show) {
+        LegendControl.prototype.add = function (legend, show, skipRebuildFocus) {
             var self = this;
             var idx = self._getLegendIdx(legend);
             //Make sure legend is not already in the legend control.
@@ -1135,9 +2055,10 @@ MIT License
                 if (legend.minZoom !== 0 || legend.maxZoom !== 24) {
                     self._hasZoomableContent = true;
                 }
-                //Rebuild the legend control. 
-                self._needsRebuild = true;
-                _super.prototype.setOptions.call(this);
+                if (!skipRebuildFocus) {
+                    //Rebuild the legend control. 
+                    self._rebuildContainer();
+                }
             }
             else if (show) {
                 //If the legend is already added, and they simply want to focus on it, then do that.
@@ -1161,7 +2082,7 @@ MIT License
          * Removes a legend from the legend control.
          * @param legend The legend to remove.
          */
-        LegendControl.prototype.remove = function (legend) {
+        LegendControl.prototype.remove = function (legend, skipRebuild) {
             var self = this;
             var idx = self._getLegendIdx(legend);
             var legends = self._options.legends;
@@ -1180,14 +2101,47 @@ MIT License
                 }
                 //Remove the legend.
                 legends.splice(idx, 1);
-                //Rebuild the legend control. 
-                self._needsRebuild = true;
-                _super.prototype.setOptions.call(this);
+                if (!skipRebuild) {
+                    //Rebuild the legend control. 
+                    self._rebuildContainer();
+                }
             }
+        };
+        LegendControl.prototype.onAdd = function (map, options) {
+            map.events.add('styledata', this._styleDataChanged);
+            return _super.prototype.onAdd.call(this, map, options);
+        };
+        LegendControl.prototype.onRemove = function () {
+            if (this._map) {
+                this._map.events.remove('styledata', this._styleDataChanged);
+            }
+            _super.prototype.onRemove.call(this);
         };
         /****************************
          * Private Methods
          ***************************/
+        LegendControl.prototype._replaceMany = function (oldLegends, newLegends) {
+            var self = this;
+            if (oldLegends) {
+                oldLegends.forEach(function (l) {
+                    self.remove(l, true);
+                });
+            }
+            //Remember current legend/idx.
+            var currentLegend = self._currentLegend;
+            var legendIdx = self._legendIdx;
+            if (newLegends) {
+                newLegends.forEach(function (l) {
+                    self.add(l, false, true);
+                });
+            }
+            if (legendIdx > -1 && currentLegend) {
+                self._currentLegend = currentLegend;
+                self._legendIdx = legendIdx;
+            }
+            //Rebuild the legend control. 
+            self._rebuildContainer();
+        };
         /**
          * Navigates to the specified legend index within a carousel or list.
          * @param idx The legend index in the array of legends in the legend control options.
@@ -1223,9 +2177,32 @@ MIT License
         LegendControl.prototype._createContent = function () {
             var self = this;
             var opt = self._options;
-            var legends = opt.legends;
             var resx = opt.resx || {};
             var layout = opt.layout;
+            var layerOptCache = {};
+            self._layerOptCache = layerOptCache;
+            var legends = [];
+            opt.legends.forEach(function (l) {
+                if (l.type === 'dynamic') {
+                    var dlg = l;
+                    var dynmaicLg = DynamicLegend.parse(dlg, self);
+                    if (dynmaicLg && dynmaicLg.length > 0) {
+                        legends = legends.concat(dynmaicLg);
+                        dynmaicLg.forEach(function (d) {
+                            if (d.minZoom !== 0 || d.maxZoom !== 24) {
+                                self._hasZoomableContent = true;
+                            }
+                        });
+                        var mapLayer = Utils.getLayer(dlg.layer, self._map);
+                        if (mapLayer['getOptions']) {
+                            layerOptCache[mapLayer.getId()] = DynamicLegend.serializeLayerOptions(mapLayer);
+                        }
+                    }
+                }
+                else {
+                    legends.push(l);
+                }
+            });
             if (self._content) {
                 self._content.remove();
             }
@@ -1237,9 +2214,6 @@ MIT License
             Utils.addStringDiv(content, opt.title, 'atlas-legend-title', resx, true);
             //Add legends.
             if (legends && legends.length > 0) {
-                if (layout === 'carousel' || layout === 'accordion') {
-                    content.classList.add('atlas-layer-legend-card-container');
-                }
                 var dotContainer = document.createElement('div');
                 dotContainer.className = 'atlas-carousel-dot-container';
                 var rebuildOnStyleChange = false;
@@ -1303,8 +2277,6 @@ MIT License
          */
         LegendControl.prototype._createCategoryLegend = function (legend, legendType, resx) {
             if (legendType.items) {
-                var strokeWidth_1 = Utils.getNumber(legendType, 'strokeWidth', 0, 1);
-                var fillSize_1 = 20 - strokeWidth_1 * 2;
                 var itemContainer_1 = document.createElement('div');
                 itemContainer_1.classList.add('atlas-legend-category-legend');
                 if (legendType.cssClass) {
@@ -1324,18 +2296,23 @@ MIT License
                     var svg;
                     var imageSrc;
                     var shape = item.shape || legendType.shape || 'circle';
+                    var strokeWidth = Utils.getNumber2(item, legendType, 'strokeWidth', 0, 1);
+                    var shapeSize = Utils.getNumber2(item, legendType, 'shapeSize', 1, 20);
+                    var fillSize = shapeSize - strokeWidth * 2;
+                    var cx = shapeSize * 0.5;
                     switch (shape) {
                         case 'line':
-                            svg = "<rect x=\"" + strokeWidth_1 + "\" y=\"8\" height=\"4\" width=\"" + fillSize_1 + "\" fill=\"" + c + "\" stroke-width=\"" + strokeWidth_1 + "\"/>";
+                            var y = shapeSize * 0.5;
+                            svg = "<line x1=\"0\" y1=\"" + y + "\" x2=\"" + shapeSize + "\" y2=\"" + y + "\" stroke=\"" + c + "\" stroke-width=\"" + strokeWidth + "\" />";
                             break;
                         case 'square':
-                            svg = "<rect x=\"" + strokeWidth_1 + "\" y=\"" + strokeWidth_1 + "\" height=\"" + fillSize_1 + "\" width=\"" + fillSize_1 + "\" fill=\"" + c + "\" stroke-width=\"" + strokeWidth_1 + "\"/>";
+                            svg = "<rect x=\"" + strokeWidth + "\" y=\"" + strokeWidth + "\" height=\"" + fillSize + "\" width=\"" + fillSize + "\" fill=\"" + c + "\" stroke-width=\"" + strokeWidth + "\"/>";
                             break;
                         case 'triangle':
-                            svg = "<polygon points=\"" + strokeWidth_1 + " " + fillSize_1 + ", " + fillSize_1 + " " + fillSize_1 + ", " + (fillSize_1 + strokeWidth_1) * 0.5 + " " + strokeWidth_1 + "\" fill=\"" + c + "\" stroke-width=\"" + strokeWidth_1 + "\"/>";
+                            svg = "<polygon points=\"" + strokeWidth + " " + fillSize + ", " + fillSize + " " + fillSize + ", " + (fillSize + strokeWidth) * 0.5 + " " + strokeWidth + "\" fill=\"" + c + "\" stroke-width=\"" + strokeWidth + "\"/>";
                             break;
                         case 'circle':
-                            svg = "<circle cx=\"10\" cy=\"10\" r=\"" + (10 - strokeWidth_1) + "\" fill=\"" + c + "\" stroke-width=\"" + strokeWidth_1 + "\"/>";
+                            svg = "<circle cx=\"" + cx + "\" cy=\"" + cx + "\" r=\"" + (cx - strokeWidth) + "\" fill=\"" + c + "\" stroke-width=\"" + strokeWidth + "\"/>";
                             break;
                         default:
                             //Is either image URL or inline image string.
@@ -1348,17 +2325,19 @@ MIT License
                             }
                             break;
                     }
-                    var shapeSize = Utils.getNumber2(item, legendType, 'shapeSize', 1, 20);
                     maxSize_1 = Math.max(maxSize_1, shapeSize);
                     var itemShape = document.createElement('div');
                     if (svg) {
-                        itemShape.innerHTML = "<svg class=\"atlas-legend-category-shape\" style=\"width:" + shapeSize + "px;\" viewBox=\"0 0 20 20\" xmlns=\"http://www.w3.org/2000/svg\">" + svg + "</svg>";
+                        itemShape.innerHTML = "<svg class=\"atlas-legend-category-shape\" style=\"width:" + shapeSize + "px;\" viewBox=\"0 0 " + shapeSize + " " + shapeSize + "\" xmlns=\"http://www.w3.org/2000/svg\">" + svg + "</svg>";
                     }
                     else if (imageSrc) {
-                        itemShape.innerHTML = "<img class=\"atlas-legend-category-shape\" style=\"width:" + shapeSize + "px;\" src=\"" + shape + "\"/>";
+                        itemShape.innerHTML = "<img class=\"atlas-legend-category-shape\" style=\"width:" + shapeSize + "px;\" src=\"" + imageSrc + "\"/>";
                     }
                     if (item.cssClass) {
                         itemDiv.classList.add(item.cssClass);
+                    }
+                    if (legendType.collapse) {
+                        itemDiv.style.padding = '0px';
                     }
                     itemDiv.appendChild(itemShape);
                     if (fitItemsVertically_1) {
@@ -1378,7 +2357,13 @@ MIT License
                     itemLabel.innerHTML = stringLabel;
                     itemLabel.setAttribute('aria-label', stringLabel);
                     if (legendType.labelsOverlapShapes) {
-                        itemLabel.style.position = 'absolute';
+                        Object.assign(itemLabel.style, {
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            textAlign: 'center',
+                            margin: '0 auto'
+                        });
                     }
                     itemDiv.appendChild(itemLabel);
                     itemContainer_1.appendChild(itemDiv);
@@ -1428,13 +2413,19 @@ MIT License
                     console.log('Unable to load legend image: ' + legendType.url);
                     itemContainer_2.remove();
                 };
-                if (legendType.maxHeight && legendType.maxHeight > 0) {
-                    img.style.maxWidth = legendType.maxHeight + 'px';
+                var maxHeight = legendType.maxHeight;
+                var maxWidth = legendType.maxWidth;
+                if (maxHeight && maxHeight > 0) {
+                    img.style.maxWidth = maxHeight + 'px';
                 }
-                if (legendType.maxWidth && legendType.maxWidth > 0) {
-                    img.style.maxWidth = legendType.maxWidth + 'px';
+                if (maxWidth && maxWidth > 0) {
+                    img.style.maxWidth = maxWidth + 'px';
                 }
-                img.src = legendType.url;
+                var imageSrc = legendType.url;
+                if (/<svg/i.test(imageSrc) && !(/^data:/i.test(imageSrc))) {
+                    imageSrc = "data:image/svg+xml;base64," + window.btoa(imageSrc);
+                }
+                img.src = imageSrc;
                 itemContainer_2.appendChild(img);
                 legend.appendChild(itemContainer_2);
             }
@@ -1600,11 +2591,21 @@ MIT License
                 layout: 'list',
                 style: 'light',
                 visible: true,
-                zoomRangeBehavior: 'disable',
+                zoomBehavior: 'disable',
                 showToggle: true,
                 minimized: false
             };
             _this._stateCache = {};
+            _this._hasDynamic = false;
+            /****************************
+             * Private Methods
+             ***************************/
+            /** Event handler for when a layer is added or removed from the map. */
+            _this._layerChanged = function (layer) {
+                var self = _this;
+                //If layer control has dynamic layer groups, they will need to be updated.
+                self._rebuildContainer();
+            };
             /**
              * Event handler for when an item changes.
              * @param state The new state.
@@ -1617,8 +2618,6 @@ MIT License
                 if (layers) {
                     var self_1 = _this;
                     var legendControl = self_1._options.legendControl;
-                    //Handle old state.
-                    var oldState = self_1._updateStateCache(state, layers, (elm instanceof HTMLOptionElement) ? elm.parentElement : elm);
                     //Handle range slider
                     if (elm instanceof HTMLInputElement && elm.type === 'range') {
                         var layerState = state;
@@ -1637,7 +2636,10 @@ MIT License
                         layerState.value = val;
                     }
                     else {
-                        var enabled = elm['checked'] || elm['selected'];
+                        var enabled = (elm['checked'] !== undefined) ? elm['checked'] : elm['selected'];
+                        if (enabled === undefined) {
+                            enabled = false;
+                        }
                         if (elm instanceof HTMLOptionElement) {
                             enabled = elm.parentElement.selectedOptions[0] === elm;
                         }
@@ -1662,7 +2664,14 @@ MIT License
                             }
                         }
                         layerState.enabled = enabled;
+                        //If style changes visibility, ensure associated legends also change. 
+                        var legend = self_1._options.legendControl;
+                        if (typeof style_2.visible === 'boolean' && legend) {
+                            legend._rebuildContainer();
+                        }
                     }
+                    //Handle old state.
+                    var oldState = self_1._updateStateCache(state, layers, (elm instanceof HTMLOptionElement) ? elm.parentElement : elm);
                     self_1._invokeEvent('statechanged', {
                         type: 'statechanged',
                         layerGroup: layerGroup,
@@ -1701,7 +2710,7 @@ MIT License
                         case 'visible':
                         case 'container':
                         case 'layout':
-                        case 'zoomRangeBehavior':
+                        case 'zoomBehavior':
                             //@ts-ignore
                             opt[key] = val;
                             break;
@@ -1714,9 +2723,24 @@ MIT License
             });
             _super.prototype.setOptions.call(this, options);
         };
-        /****************************
-         * Private Methods
-         ***************************/
+        LayerControl.prototype.onAdd = function (map, options) {
+            //Add events to monitor the layers being added and removed.
+            map.events.add('layeradded', this._layerChanged);
+            map.events.add('layerremoved', this._layerChanged);
+            return _super.prototype.onAdd.call(this, map, options);
+        };
+        LayerControl.prototype.onRemove = function () {
+            var self = this;
+            var map = self._map;
+            if (map) {
+                map.events.remove('layeradded', self._layerChanged);
+                map.events.remove('layerremoved', self._layerChanged);
+            }
+            return _super.prototype.onRemove.call(this);
+        };
+        LayerControl.prototype.refresh = function () {
+            this._rebuildContainer();
+        };
         /**
         * Navigates to the specified layer index within a carousel or list.
         * @param idx The layer index in the array of layers in the layer control options.
@@ -1733,7 +2757,42 @@ MIT License
             var opt = self._options;
             var resx = opt.resx || {};
             var layout = opt.layout;
-            var layerGroups = opt.layerGroups;
+            var hasZoomRange = false;
+            //Clone the layer group array as dynamic layer groups might get appended.
+            var layerGroups = (opt.layerGroups) ? opt.layerGroups.map(function (x) { return x; }) : [];
+            var dlg = opt.dynamicLayerGroup;
+            //Get the layer groups to render.
+            if (dlg) {
+                var hasDynamic = false;
+                var lg = self._getLayerGroup(dlg);
+                if (lg) {
+                    hasDynamic = true;
+                    hasZoomRange = true;
+                    var idx = dlg.layerGroupIdx;
+                    if (typeof idx !== 'number' || idx < 0 || idx > layerGroups.length) {
+                        idx = 0;
+                    }
+                    layerGroups.splice(idx, 0, lg);
+                    if (opt.legendControl) {
+                        //Create a dynamic legend type for all layers within layer group.
+                        //Each layer should only exist once in a dynamic layer group, and all layers are set at the item level.
+                        var legends_1 = [];
+                        lg.items.forEach(function (item) {
+                            if (item.layers) {
+                                item.layers.forEach(function (l) {
+                                    legends_1.push({
+                                        type: 'dynamic',
+                                        layer: l
+                                    });
+                                });
+                            }
+                        });
+                        opt.legendControl._replaceMany(self._dynamicLegends, legends_1);
+                        self._dynamicLegends = legends_1;
+                    }
+                }
+                self._hasDynamic = hasDynamic;
+            }
             if (self._content) {
                 self._content.remove();
             }
@@ -1747,7 +2806,6 @@ MIT License
             if (layerGroups && layerGroups.length > 0) {
                 var dotContainer = document.createElement('div');
                 dotContainer.className = 'atlas-carousel-dot-container';
-                var hasZoomRange_1 = false;
                 var _loop_1 = function (i) {
                     var id = Utils.uuid();
                     var lg = layerGroups[i];
@@ -1757,7 +2815,7 @@ MIT License
                     lg.maxZoom = Utils.getNumber2(lg, lgZr, 'maxZoom', 0, 24);
                     //Only consider data zoomable if the zoom range is not the max range of 0 to 24.
                     if (lg.minZoom !== 0 || lg.maxZoom !== 24) {
-                        hasZoomRange_1 = true;
+                        hasZoomRange = true;
                     }
                     if (lg.items) {
                         //Process states within a layer group.
@@ -1773,13 +2831,16 @@ MIT License
                             state.maxZoom = Math.min(Utils.getNumber2(state, lZr, 'maxZoom', 0, 24), lg.maxZoom);
                             //Only consider data zoomable if the zoom range is not the max range of 0 to 24.
                             if (state.minZoom !== 0 && state.maxZoom !== 24) {
-                                hasZoomRange_1 = true;
+                                hasZoomRange = true;
                             }
                         });
                     }
                     var card = document.createElement('div');
                     card.classList.add('atlas-layer-legend-card');
                     card.id = id;
+                    if (lg.cssClass) {
+                        card.classList.add(lg.cssClass);
+                    }
                     //Add the id to the `rel` attribute.
                     card.setAttribute('rel', i + '');
                     var titleString = void 0;
@@ -1787,7 +2848,7 @@ MIT License
                         titleString = Utils.getString(lg.groupTitle, resx);
                     }
                     else {
-                        titleString = Utils.addStringDiv(card, lg.groupTitle, 'atlas-legend-group-title', resx, true);
+                        titleString = Utils.addStringDiv(card, lg.groupTitle, 'atlas-layer-group-title', resx, true);
                     }
                     if (lg.legends && opt.legendControl) {
                         for (var i_1 = 0; i_1 < lg.legends.length; i_1++) {
@@ -1819,7 +2880,7 @@ MIT License
                 for (var i = 0; i < layerGroups.length; i++) {
                     _loop_1(i);
                 }
-                self._hasZoomableContent = hasZoomRange_1;
+                self._hasZoomableContent = hasZoomRange;
                 //Add carousel dots
                 if (layout === 'carousel') {
                     if (dotContainer.children.length > 1) {
@@ -1883,7 +2944,7 @@ MIT License
                         option.selected = true;
                     }
                     //Store min/max zoom info as attributes.
-                    Utils.setZoomRangeAttr(item, option);
+                    Utils.setZoomRangeAttr(item, self._baseOptions, option);
                     dropdown.appendChild(option);
                     self._bindLayerState(item, layerGroup, option);
                 });
@@ -1919,7 +2980,7 @@ MIT License
                     label.appendChild(span);
                     self._bindLayerState(item, layerGroup, input);
                     //Store min/max zoom info as attributes.
-                    Utils.setZoomRangeAttr(item, label);
+                    Utils.setZoomRangeAttr(item, self._baseOptions, label);
                     itemContainer.appendChild(label);
                 });
             }
@@ -1935,27 +2996,33 @@ MIT License
             var itemContainer = document.createElement('div');
             if (layerGroup.items) {
                 var items = layerGroup.items;
+                var getNumber_1 = Utils.getNumber;
+                var measureText_1 = Utils.measureText;
+                var placeholder_1 = '{rangeValue}';
                 items.forEach(function (item) {
                     //<label><input type="range" /><span>Option 1</span></label>
                     var label = document.createElement('label');
                     label.className = 'atlas-layer-range';
                     var input = document.createElement('input');
                     input.type = 'range';
-                    var min = Utils.getNumber(item, 'min', 0, 0);
-                    var max = Utils.getNumber(item, 'max', 0, 1);
-                    var step = Utils.getNumber(item, 'step', 0, 0.1);
-                    var value = Utils.getNumber(item, 'value', 0, 1);
+                    var min = getNumber_1(item, 'min', 0, 0);
+                    var max = getNumber_1(item, 'max', 0, 1);
+                    var step = getNumber_1(item, 'step', 0, 0.1);
+                    var value = getNumber_1(item, 'value', 0, 1);
                     input.setAttribute('min', min + '');
                     input.setAttribute('max', max + '');
                     input.setAttribute('step', step + '');
                     input.value = value + '';
                     label.appendChild(input);
                     var span = document.createElement('span');
-                    var labelString = item.label ? Utils.getString(item.label, self._options.resx) : '{rangeValue}';
-                    span.innerHTML = labelString.replace('{rangeValue}', new Intl.NumberFormat(undefined, item.numberFormat || {}).format(value));
+                    var labelString = item.label ? Utils.getString(item.label, self._options.resx) : placeholder_1;
+                    var numberFormat = new Intl.NumberFormat(undefined, item.numberFormat || {});
+                    span.innerHTML = labelString.replace(placeholder_1, numberFormat.format(value));
+                    //Try and determine max width of label. Measure min, max, value, and max minus the step.
+                    span.style.minWidth = Math.max(measureText_1(labelString.replace(placeholder_1, numberFormat.format(value)), 12, 'Arial').width, measureText_1(labelString.replace(placeholder_1, numberFormat.format(min)), 12, 'Arial').width, measureText_1(labelString.replace(placeholder_1, numberFormat.format(max)), 12, 'Arial').width, measureText_1(labelString.replace(placeholder_1, numberFormat.format(max - step)), 12, 'Arial').width) + 'px';
                     label.appendChild(span);
                     //Store min/max zoom info as attributes.
-                    Utils.setZoomRangeAttr(item, label);
+                    Utils.setZoomRangeAttr(item, self._baseOptions, label);
                     self._bindLayerState(item, layerGroup, input, item.updateOnInput);
                     itemContainer.appendChild(label);
                 });
@@ -1974,23 +3041,30 @@ MIT License
             var legendControl = self._options.legendControl;
             //Handle old state of radio buttons.
             if ((elm instanceof HTMLInputElement && elm.type === 'radio') || elm instanceof HTMLSelectElement) {
-                var oldState_1 = self._stateCache[elm.name];
-                if (oldState_1) {
+                var state = item;
+                var oldState = self._stateCache[elm.name];
+                if (oldState && oldState !== item) {
                     //Disable old state.
-                    oldState_1.enabled = false;
+                    oldState.enabled = !state.enabled;
                     //Trigger disabled styles.
-                    if (oldState_1.disabledStyle) {
-                        oldState_1.layers.forEach(function (layer) { return self._setLayerStyle(layer, oldState_1.disabledStyle); });
+                    var oldStyle_1 = (oldState.enabled) ? oldState.enabledStyle : oldState.disabledStyle;
+                    if (oldStyle_1 && oldState.layers) {
+                        oldState.layers.forEach(function (layer) { return self._setLayerStyle(layer, oldStyle_1); });
                     }
                     //Remove any associated legend.
-                    if (legendControl && oldState_1.legends) {
-                        oldState_1.legends.forEach(function (l) {
+                    if (legendControl && oldState.legends) {
+                        oldState.legends.forEach(function (l) {
                             legendControl.remove(l);
                         });
                     }
+                    if (state.enabled) {
+                        self._stateCache[elm.name] = state;
+                        return oldState;
+                    }
                 }
-                self._stateCache[elm.name] = item;
-                return oldState_1;
+                else if (!oldState && state.enabled) {
+                    self._stateCache[elm.name] = state;
+                }
             }
             return null;
         };
@@ -2100,7 +3174,10 @@ MIT License
             if (map) {
                 if (layerGroup && layerGroup.layers) {
                     layerGroup.layers.forEach(function (l) {
-                        layers.push(Utils.getLayer(l, map));
+                        var tl = Utils.getLayer(l, map);
+                        if (tl) {
+                            layers.push(tl);
+                        }
                     });
                 }
                 if (state) {
@@ -2128,6 +3205,117 @@ MIT License
                 }
             }
             return layers;
+        };
+        /**
+         * Creates a layer group for a dynamic layer group.
+         * @param dynamicLayerGroup A dynamic layer group to process.
+         */
+        LayerControl.prototype._getLayerGroup = function (dynamicLayerGroup) {
+            if (!dynamicLayerGroup.layout) {
+                return;
+            }
+            var self = this;
+            var layerGroup = {
+                cssClass: dynamicLayerGroup.cssClass,
+                groupTitle: dynamicLayerGroup.groupTitle,
+                legends: dynamicLayerGroup.legends,
+                items: [],
+                //@ts-ignore
+                layout: dynamicLayerGroup.layout || 'checkbox'
+            };
+            //Get the layers from the map.
+            var layers = Utils.getMapLayers(self._map, dynamicLayerGroup.layerFilter);
+            var labelProperty = dynamicLayerGroup.labelProperty;
+            if (layers && layers.length > 0) {
+                //For radio and dropdowns, either select the first visible layer, or make the first visible.
+                var hasSelection_1 = false;
+                layers.forEach(function (l) {
+                    var opt = (l['getOptions']) ? l['getOptions']() : {};
+                    var enabled = opt.visible;
+                    if (enabled === undefined) {
+                        enabled = true;
+                    }
+                    if (layerGroup.layout === 'dropdown' || layerGroup.layout === 'radio') {
+                        if (hasSelection_1) {
+                            enabled = false;
+                            if (l['setOptions']) {
+                                l['setOptions']({ visible: false });
+                            }
+                        }
+                        else if (enabled) {
+                            hasSelection_1 = true;
+                        }
+                    }
+                    var label = Utils.getString((labelProperty && l.metadata && l.metadata[labelProperty] && l.metadata[labelProperty] !== '') ? l.metadata[labelProperty] : l.getId(), self._options.resx);
+                    var ogcLayer = azmaps.layer['OgcMapLayer'];
+                    var simpleLayer = azmaps.layer['SimpleDataLayer'];
+                    if (l.getId() === label && label.indexOf('-') > -1) {
+                        //If it is an OGC Map layer, get the label from the capabilities.
+                        if (ogcLayer && l instanceof ogcLayer) {
+                            var ogc = l;
+                            var client = ogc._client;
+                            if (client && client._capabilities) {
+                                var cap = client._capabilities;
+                                if (cap.title && cap.title !== '' && cap.title.toLowerCase() === 'wms') {
+                                    label = cap.title;
+                                }
+                                else {
+                                    var activeLayers = ogc.getOptions().activeLayers;
+                                    var sublayers = cap.sublayers;
+                                    if (activeLayers.length === 1 && sublayers) {
+                                        var al = activeLayers[0];
+                                        for (var i = 0; i < sublayers.length; i++) {
+                                            if ((typeof al === 'string' && al === sublayers[i].id) || al.id === sublayers[i].id) {
+                                                var styles = al.styles;
+                                                if (styles && styles.length > 0 && styles[0].legendUrl && styles[0].legendUrl !== '') {
+                                                    label = al.title || al.subtitle || sublayers[i].id || '';
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else {
+                                //If no client or capabilities, reload the capabilities.
+                                ogc.getCapabilities().then(function (cap) {
+                                    if (cap) {
+                                        self._rebuildContainer();
+                                    }
+                                });
+                            }
+                        }
+                        else if (simpleLayer && l instanceof simpleLayer) {
+                            var sLayer = l;
+                            if (sLayer.metadata) {
+                                label = sLayer.metadata.title || sLayer.metadata.name || '';
+                            }
+                        }
+                    }
+                    layerGroup.items.push({
+                        layers: [l],
+                        label: label,
+                        enabled: enabled,
+                        enabledStyle: {
+                            visible: true
+                        },
+                        disabledStyle: {
+                            visible: false
+                        },
+                        minZoom: Utils.getNumber(opt, 'minZoom', 0, 0),
+                        maxZoom: Utils.getNumber(opt, 'maxZoom', 0, 24),
+                    });
+                });
+                if (!hasSelection_1 && (layerGroup.layout === 'dropdown' || layerGroup.layout === 'radio')) {
+                    layerGroup.items[0].enabled = true;
+                    if (layers[0]['setOptions']) {
+                        layers[0]['setOptions']({ visible: true });
+                    }
+                }
+            }
+            else {
+                return;
+            }
+            return layerGroup;
         };
         return LayerControl;
     }(BaseControl));

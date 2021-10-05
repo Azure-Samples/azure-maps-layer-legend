@@ -1,5 +1,7 @@
 import * as azmaps from 'azure-maps-control';
-import { LayerGroup, LayerState, LegendType } from '../control';
+import { at } from 'lodash';
+import { BaseControlOptions } from 'src/control/BaseControl';
+import { DynamicLayerGroup, LayerGroup, LayerState, LegendType } from '../control';
 
 /** Min/max zoom level range. */
 export interface ZoomRange {
@@ -18,7 +20,7 @@ export class Utils {
      * @returns A string.
      */
     public static getString(val: string | number, resx: Record<string, string>, locales?: string | string[], numberFormat?: Intl.NumberFormatOptions): string {
-        if (val) {
+        if (typeof val !== 'undefined') {
             if (typeof val === 'number') {
                 return val.toLocaleString(locales, numberFormat);
             }
@@ -128,13 +130,23 @@ export class Utils {
      * @param elm The element to set the zoom range on.
      * @param elm2 A secondary element that the min/max zoom info should be added to, such as the dots of a carousel.
      */
-    public static setZoomRangeAttr(item: LegendType | LayerState | LayerGroup, elm: HTMLElement, elm2?: HTMLElement): void {
-        elm.setAttribute('data-min-zoom', item.minZoom + '');
-        elm.setAttribute('data-max-zoom', item.maxZoom + '');
+    public static setZoomRangeAttr(item: LegendType | LayerState | LayerGroup, baseOptions: BaseControlOptions, elm: HTMLElement, elm2?: HTMLElement): void {        
+        const minAttr = 'data-min-zoom';
+        const maxAttr = 'data-max-zoom';
+        const zoomBehaviorAttr = 'data-zoom-behavior';
+
+        const min = item.minZoom + '';
+        const max = item.maxZoom + '';       
+        const zoomBehavior = item.zoomBehavior || baseOptions.zoomBehavior || '';
+
+        elm.setAttribute(minAttr, min);
+        elm.setAttribute(maxAttr, max);
+        elm.setAttribute(zoomBehaviorAttr, zoomBehavior);
 
         if (elm2) {
-            elm2.setAttribute('data-min-zoom', item.minZoom + '');
-            elm2.setAttribute('data-max-zoom', item.maxZoom + '');
+            elm2.setAttribute('data-min-zoom', min);
+            elm2.setAttribute('data-max-zoom', max);
+            elm2.setAttribute(zoomBehaviorAttr, zoomBehavior);
         }
     }
 
@@ -142,15 +154,20 @@ export class Utils {
      * Processes the zoom range attributes of a set of elements based on a zoom level and the desired behavior.
      * @param elms The elements to process.
      * @param zoom The zoom level to process for.
-     * @param behavior The desired behavior.
      */
-    public static processZoomRangeAttr(elms: NodeListOf<Element>, zoom: number, behavior: 'hide' | 'disable'): void {
+    public static processZoomRangeAttr(elms: NodeListOf<Element>, zoom: number): void {
+        const minAttr = 'data-min-zoom';
+        const maxAttr = 'data-max-zoom';
+        const zoomBehaviorAttr = 'data-zoom-behavior';
+        const disabledCss = 'atlas-carousel-disabled-text';
+
         for (let i = 0; i < elms.length; i++) {
             const elm = elms[i];
-            if (elm.hasAttribute('data-min-zoom')) {
-                const minZoom = parseInt(elm.getAttribute('data-min-zoom'));
-                const maxZoom = parseInt(elm.getAttribute('data-max-zoom'));
-                const inRange = (zoom >= minZoom && zoom <= maxZoom);
+            if (elm.hasAttribute(minAttr)) {
+                const minZoom = parseInt(elm.getAttribute(minAttr));
+                const maxZoom = parseInt(elm.getAttribute(maxAttr));
+                const behavior = elm.getAttribute(zoomBehaviorAttr);
+                const inRange = (zoom >= minZoom && Math.ceil(zoom) <= maxZoom);
 
                 if (behavior === 'hide') {
                     (<HTMLElement>elm).style.display = inRange ? '' : 'none';
@@ -164,9 +181,9 @@ export class Utils {
 
                     //Set a disabled CSS class on the element which will make text a shaded grey color.
                     if (inRange) {
-                        elm.classList.remove('atlas-carousel-disabled-text');
+                        elm.classList.remove(disabledCss);
                     } else {
-                        elm.classList.add('atlas-carousel-disabled-text');
+                        elm.classList.add(disabledCss);
                     }
                 }
             }
@@ -278,7 +295,7 @@ export class Utils {
     public static getNumber(obj: any, property: string, minValue: number, defaultValue: number): number {
         const val = obj[property];
 
-        if(typeof val === 'number') {
+        if (typeof val === 'number') {
             return Math.max(minValue, val);
         }
 
@@ -294,19 +311,118 @@ export class Utils {
      * @param defaultValue The default value to return if no number found.
      * @returns A number from an object.
      */
-        public static getNumber2(obj: any, obj2: any, property: string, minValue: number, defaultValue: number): number {
+    public static getNumber2(obj: any, obj2: any, property: string, minValue: number, defaultValue: number): number {
         let val = obj[property];
 
-        if(typeof val === 'number') {
+        if (typeof val === 'number') {
             return Math.max(minValue, val);
         }
 
         val = obj2[property];
 
-        if(typeof val === 'number') {
+        if (typeof val === 'number') {
             return Math.max(minValue, val);
         }
 
         return defaultValue;
+    }
+
+    /**
+     * Gets all user defined layers from the map.
+     * @param map The map instance.
+     * @param layerFiler An array of layers to limit the search to.
+     * @returns All user defined layers from the map.
+     */
+    public static getMapLayers(map: azmaps.Map, layerFilter?: (string | azmaps.layer.Layer)[]): azmaps.layer.Layer[] {
+        const userLayers: azmaps.layer.Layer[] = [];
+
+        if (map) {
+            const mapLayers = map.layers.getLayers();
+            const layers: azmaps.layer.Layer[] = [];
+
+
+            let filter: string[] = [];
+            if (layerFilter && layerFilter.length > 0) {
+                layerFilter.forEach(l => {
+                    filter.push((typeof l === 'string') ? l : l.getId());
+                })
+            }
+
+            //Look for a drawing toolbar on the map. If there is one, grab it's drawing manager and filter out it's layers.
+            const dt = azmaps.control['DrawingToolbar'];
+
+            if(dt) {
+                map.controls.getControls().forEach(c => {
+                    if(c instanceof dt) {
+                        const l = dt.drawMgr.getLayers();
+                        filter.push(l.lineLayer.getId());
+                        filter.push(l.pointLayer.getId());
+                        filter.push(l.polygonLayer.getId());
+                        filter.push(l.polygonOutlineLayer.getId());
+                    }
+                });
+            }
+
+            const simpleDataLayer = azmaps.layer['SimpleDataLayer'];
+
+            mapLayers.forEach(l => {
+                //@ts-ignore
+                const id = (l.layers && l.layers.length > 0) ? l.layers[0].id : l.getId();
+
+                //Handle simple data layer - filter out it's sublayers.
+                if(simpleDataLayer && l instanceof simpleDataLayer){
+                    layers.push(l);
+
+                    //Remove/filter out any sub layers.
+                    var sublayers = l['getLayers']();
+                    Object.keys(sublayers).forEach(key => {
+                        const sl = sublayers[key];
+                        const idx = layers.indexOf(sl);
+                        if(idx > -1){
+                            layers.splice(idx, 1);
+                        }
+                        filter.push(sl.getId());
+                    });
+                } else if (!id.startsWith('microsoft.maps.')) { //Filter out all microsoft.maps layers.
+                    layers.push(l);
+                }
+            });
+
+            //Finalize filter.
+            layers.forEach(l => {
+                //@ts-ignore
+                const id = (l.layers && l.layers.length > 0) ? l.layers[0].id : l.getId();
+                if(filter.indexOf(id) === -1){
+                    userLayers.push(l);
+                }
+            });
+        }
+
+        return userLayers;
+    }
+
+    /**
+     * Determines the number of decimal places in a number.
+     * @param num Number to get decimal places for.
+     */
+    public static decimalPlaces(num: number): number {
+        const match = ('' + num).match(/(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/);
+        if (!match) { return 0; }
+        return Math.max(
+            0,
+            // Number of digits right of decimal point.
+            (match[1] ? match[1].length : 0)
+            // Adjust for scientific notation.
+            - (match[2] ? +match[2] : 0));
+    }
+
+    /**
+     * Rounds a number to a specified number of decimal places.
+     * @param num The number to round.
+     * @param decimals The number of decimal places.
+     */
+    public static round(num: number, decimals: number): number {
+        const factorOfTen = Math.pow(10, decimals);
+        return Math.round(num * factorOfTen) / factorOfTen;
     }
 }

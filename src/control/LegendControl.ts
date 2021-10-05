@@ -1,4 +1,5 @@
 import * as azmaps from 'azure-maps-control';
+import { DynamicLegend, DynamicLegendType } from '../helpers/DynamicLegend';
 import { Utils } from '../helpers/Utils';
 import { BaseControl, BaseControlEvents, BaseControlOptions } from './BaseControl';
 
@@ -17,7 +18,10 @@ export interface CategoryLegendItem {
     /** The size of the individual shape in pixels. Used to scale the width of the shape. Overrides `CategoryLegendType` level `shapeSize`. Default: 20 */
     shapeSize?: number;
 
-    /** A CSS class added to an individual item.  */
+    /** The thickness of the stroke on SVG shapes in pixels. Overrides `CategoryLegendType` level `strokeWidth`. Default: `1` */
+    strokeWidth?: number;
+
+    /** A CSS class added to an individual item. */
     cssClass?: string;
 }
 
@@ -50,14 +54,17 @@ export interface CategoryLegendType extends LegendType {
     /** The thickness of the stroke on SVG shapes in pixels. Default: `1` */
     strokeWidth?: number;
 
-    /** Specifies if the text label should overlap the shapes. When set to `true`, the position of the label span will be set to `absolute`. Default: `false`  */
+    /** Specifies if the text label should be centered overtop the shapes. Default: `false`  */
     labelsOverlapShapes?: boolean;
 
     /** The number format options to use when converting a number label to a string. */
     numberFormat?: Intl.NumberFormatOptions;
 
     /** The number format locales to use when converting a number label to a string. */
-    numberFormatLocales?:string | string[];
+    numberFormatLocales?: string | string[];
+
+    /** Specifies if space around the shapes should be collapsed so that items are close together. Default: `false` */
+    collapse?: boolean;
 }
 
 /** A simple legend where the content is an image. */
@@ -96,13 +103,13 @@ export interface ColorStop {
     color: string;
 
     /** A label to display at this stop. */
-    label: string | number;
+    label?: string | number;
 }
 
 /** A legend for a sequential gradient scale.  */
 export interface GradientLegendType extends LegendType {
-     /** The type of legend. */
-     type: 'gradient';
+    /** The type of legend. */
+    type: 'gradient';
 
     /** The color stops that form the gradient. */
     stops: ColorStop[];
@@ -123,34 +130,37 @@ export interface GradientLegendType extends LegendType {
     fontSize?: number;
 
     /** The font family used for labels. Default: `"'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif"` */
-    fontFamily?: string;    
+    fontFamily?: string;
 
     /** The number format options to use when converting a number label to a string. */
     numberFormat?: Intl.NumberFormatOptions;
 
     /** The number format locales to use when converting a number label to a string. */
-    numberFormatLocales?:string | string[];
+    numberFormatLocales?: string | string[];
 }
 
 /** Base legend type that all other legend types inherit from. */
 export interface LegendType {
     /** The type of legend to create. */
-    type: 'category' | 'image' | 'html' | 'gradient';
+    type: 'category' | 'dynamic' | 'image' | 'html' | 'gradient';
 
     /** The title for this specific legend. */
     subtitle?: string;
 
     /** Text to be added at the bottom of the legend. */
-    footer: string;
+    footer?: string;
 
     /** A CSS class to append to the legend type container. */
     cssClass?: string;
 
     /** Min zoom level that this legend should appear.  Default: `0` */
-    minZoom: number;
+    minZoom?: number;
 
     /** Max zoom level that this legend should appear. Default: `24` */
-    maxZoom: number;
+    maxZoom?: number;
+    
+    /** Specifies how a legend card should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'hide'` */
+    zoomBehavior?: 'disable' | 'hide';
 }
 
 /** Options for a legend control. */
@@ -158,7 +168,7 @@ export interface LegendControlOptions extends BaseControlOptions {
     /** The top level title of the legend control. */
     title?: string;
 
-    /** The type of legend to generate. */
+    /** The type of legends to generate. */
     legends?: LegendType[];
 
     /** Resource strings. */
@@ -181,7 +191,7 @@ export interface LegendFocusEventArgs {
 
     /** The event type name. */
     type: 'legendfocused'
- }
+}
 
 /** A control that displays legend information on the map. */
 export class LegendControl extends BaseControl<LegendControlEvents> {
@@ -195,13 +205,14 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
         style: <azmaps.ControlStyle>'light',
         visible: true,
         legends: [],
-        zoomRangeBehavior: 'hide',
+        zoomBehavior: 'hide',
         showToggle: true,
         minimized: false
     };
 
     private _legendIdx = 0;
     private _currentLegend: LegendType = null;
+    private _layerOptCache: Record<string, string> = {};
 
     /****************************
      * Constructor
@@ -213,6 +224,7 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
      */
     constructor(options?: LegendControlOptions) {
         super(0, 'atlas-legend-control-container', 'atlas-legend-btn');
+
         this.setOptions(options);
     }
 
@@ -244,7 +256,7 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
                     case 'visible':
                     case 'container':
                     case 'layout':
-                    case 'zoomRangeBehavior':
+                    case 'zoomBehavior':
                         //@ts-ignore
                         opt[key] = val;
                         break;
@@ -275,7 +287,7 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
                             l.maxZoom = Utils.getNumber(l, 'maxZoom', 0, 24);
 
                             //Only consider data zoomable if the zoom range is not the max range of 0 to 24.
-                            if (l.minZoom !== 0 || l.maxZoom !== 24) {
+                            if (l.minZoom !== 0 || l.maxZoom !== 24 || l.type === 'dynamic') {
                                 hasZoomRange = true;
                             }
                         });
@@ -312,7 +324,7 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
      * @param legend The legend to add.
      * @param show A boolean indicating if this legend should be displayed.
      */
-    public add(legend: LegendType, show: boolean): void {
+    public add(legend: LegendType, show: boolean, skipRebuildFocus?: boolean): void {
         const self = this;
         const idx = self._getLegendIdx(legend);
 
@@ -333,9 +345,10 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
                 self._hasZoomableContent = true;
             }
 
-            //Rebuild the legend control. 
-            self._needsRebuild = true;
-            super.setOptions();
+            if(!skipRebuildFocus){
+                //Rebuild the legend control. 
+                self._rebuildContainer();
+            }
         } else if (show) {
             //If the legend is already added, and they simply want to focus on it, then do that.
             self.setLegendIdx(idx);
@@ -361,7 +374,7 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
      * Removes a legend from the legend control.
      * @param legend The legend to remove.
      */
-    public remove(legend: LegendType): void {
+    public remove(legend: LegendType, skipRebuild?: boolean): void {
         const self = this;
         const idx = self._getLegendIdx(legend);
         const legends = self._options.legends;
@@ -370,27 +383,92 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
         if (idx > -1 && legends.length > idx) {
             //If this is the current legend, move down one legend.
             if (self._legendIdx === idx) {
-                if(legends.length > 1){
+                if (legends.length > 1) {
                     self._legendIdx = idx - 1;
                     self._currentLegend = legends[idx - 1];
                 } else {
                     self._legendIdx = -1;
                     self._currentLegend = null;
-                }           
+                }
             }
 
             //Remove the legend.
             legends.splice(idx, 1);
 
-            //Rebuild the legend control. 
-            self._needsRebuild = true;
-            super.setOptions();
+            if(!skipRebuild){
+                //Rebuild the legend control. 
+                self._rebuildContainer();
+            }
         }
+    }
+
+    public onAdd(map: azmaps.Map, options?: azmaps.ControlOptions): HTMLElement {
+        map.events.add('styledata', this._styleDataChanged);
+        return super.onAdd(map, options);
+    }
+
+    public onRemove(): void {
+        if(this._map){
+            this._map.events.remove('styledata', this._styleDataChanged);
+        }
+        super.onRemove();
     }
 
     /****************************
      * Private Methods
      ***************************/
+
+    public _replaceMany(oldLegends: LegendType[], newLegends: LegendType[]): void {
+        const self = this;
+        
+        if(oldLegends){
+            oldLegends.forEach(l => {
+                self.remove(l, true);
+            });            
+        }
+
+        //Remember current legend/idx.
+        const currentLegend = self._currentLegend;
+        const legendIdx = self._legendIdx;
+
+        if(newLegends){
+            newLegends.forEach(l => {
+                self.add(l, false, true);
+            });    
+        }
+
+        if(legendIdx > -1 && currentLegend) {
+            self._currentLegend = currentLegend; 
+            self._legendIdx = legendIdx; 
+        }
+
+        //Rebuild the legend control. 
+        self._rebuildContainer();
+    }
+
+    private _styleDataChanged = (): void => {
+        const self = this;
+        const layerOptCache = self._layerOptCache;
+        const map = self._map;
+
+        //Loop through monitored layers and if any of their options have changed, rebuild legend.
+        let needsRebuild = false;
+
+        Object.keys(layerOptCache).forEach(key => {            
+            const l = map.layers.getLayerById(key);
+
+            const opt = layerOptCache[key];
+            const opt2 = DynamicLegend.serializeLayerOptions(l);
+
+            if(opt !== opt2) {
+                needsRebuild = true;
+            }
+        });
+
+        if(needsRebuild){
+            self._rebuildContainer();
+        }
+    }
 
     /**
      * Navigates to the specified legend index within a carousel or list.
@@ -434,9 +512,37 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
     public _createContent(): void {
         const self = this;
         const opt = self._options;
-        const legends = opt.legends;
         const resx = opt.resx || {};
         const layout = opt.layout;
+
+        const layerOptCache: any = {};
+        self._layerOptCache = layerOptCache;
+
+        let legends = [];
+
+        opt.legends.forEach(l => {
+            if (l.type === 'dynamic') {
+                const dlg = <DynamicLegendType>l;
+                const dynmaicLg = DynamicLegend.parse(dlg, self);
+
+                if(dynmaicLg && dynmaicLg.length > 0){
+                    legends = legends.concat(dynmaicLg);
+
+                    dynmaicLg.forEach(d => {
+                        if(d.minZoom !== 0 || d.maxZoom !== 24){
+                            self._hasZoomableContent = true;
+                        }
+                    });
+
+                    const mapLayer = Utils.getLayer(dlg.layer, self._map);
+                    if(mapLayer['getOptions']){                        
+                        layerOptCache[mapLayer.getId()] = DynamicLegend.serializeLayerOptions(mapLayer);
+                    }
+                }
+            } else {
+                legends.push(l);
+            }
+        });
 
         if (self._content) {
             self._content.remove();
@@ -452,11 +558,6 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
 
         //Add legends.
         if (legends && legends.length > 0) {
-
-            if (layout === 'carousel' || layout === 'accordion') {
-                content.classList.add('atlas-layer-legend-card-container');
-            }
-
             const dotContainer = document.createElement('div');
             dotContainer.className = 'atlas-carousel-dot-container';
 
@@ -507,8 +608,8 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
             self._rebuildOnStyleChange = rebuildOnStyleChange;
 
             //Add carousel dots
-            if (layout === 'carousel'){
-                if(dotContainer.children.length > 1) {
+            if (layout === 'carousel') {
+                if (dotContainer.children.length > 1) {
                     Utils.addClearDiv(content);
                     content.appendChild(dotContainer);
                 }
@@ -532,10 +633,6 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
      */
     private _createCategoryLegend(legend: HTMLElement, legendType: CategoryLegendType, resx: Record<string, string>): void {
         if (legendType.items) {
-            const strokeWidth = Utils.getNumber(legendType, 'strokeWidth', 0, 1);
-
-            const fillSize = 20 - strokeWidth * 2;
-
             const itemContainer = document.createElement('div');
             itemContainer.classList.add('atlas-legend-category-legend');
 
@@ -548,7 +645,7 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
             }
 
             const fitItemsVertically = (legendType.fitItems && legendType.layout && legendType.layout.startsWith('row') &&
-                                        legendType.itemLayout && legendType.itemLayout.startsWith('column'));
+                legendType.itemLayout && legendType.itemLayout.startsWith('column'));
 
             let maxSize = 0;
 
@@ -563,18 +660,24 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
 
                 const shape = item.shape || legendType.shape || 'circle';
 
+                const strokeWidth = Utils.getNumber2(item, legendType, 'strokeWidth', 0, 1);
+                const shapeSize = Utils.getNumber2(item, legendType, 'shapeSize', 1, 20);
+                const fillSize = shapeSize - strokeWidth * 2;
+                const cx = shapeSize * 0.5;
+
                 switch (shape) {
                     case 'line':
-                        svg = `<rect x="${strokeWidth}" y="8" height="4" width="${fillSize}" fill="${c}" stroke-width="${strokeWidth}"/>`;
+                        const y = shapeSize * 0.5;
+                        svg = `<line x1="0" y1="${y}" x2="${shapeSize}" y2="${y}" stroke="${c}" stroke-width="${strokeWidth}" />`;
                         break;
                     case 'square':
                         svg = `<rect x="${strokeWidth}" y="${strokeWidth}" height="${fillSize}" width="${fillSize}" fill="${c}" stroke-width="${strokeWidth}"/>`;
                         break;
                     case 'triangle':
-                        svg = `<polygon points="${strokeWidth} ${fillSize}, ${fillSize} ${fillSize}, ${(fillSize+strokeWidth) * 0.5} ${strokeWidth}" fill="${c}" stroke-width="${strokeWidth}"/>`;
+                        svg = `<polygon points="${strokeWidth} ${fillSize}, ${fillSize} ${fillSize}, ${(fillSize + strokeWidth) * 0.5} ${strokeWidth}" fill="${c}" stroke-width="${strokeWidth}"/>`;
                         break;
                     case 'circle':
-                        svg = `<circle cx="10" cy="10" r="${10 - strokeWidth}" fill="${c}" stroke-width="${strokeWidth}"/>`;
+                        svg = `<circle cx="${cx}" cy="${cx}" r="${cx - strokeWidth}" fill="${c}" stroke-width="${strokeWidth}"/>`;
                         break;
                     default:
                         //Is either image URL or inline image string.
@@ -587,23 +690,26 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
                         break;
                 }
 
-                const shapeSize = Utils.getNumber2(item, legendType, 'shapeSize', 1, 20);
                 maxSize = Math.max(maxSize, shapeSize);
                 const itemShape = document.createElement('div');
 
                 if (svg) {
-                    itemShape.innerHTML = `<svg class="atlas-legend-category-shape" style="width:${shapeSize}px;" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">${svg}</svg>`;
+                    itemShape.innerHTML = `<svg class="atlas-legend-category-shape" style="width:${shapeSize}px;" viewBox="0 0 ${shapeSize} ${shapeSize}" xmlns="http://www.w3.org/2000/svg">${svg}</svg>`;
                 } else if (imageSrc) {
-                    itemShape.innerHTML = `<img class="atlas-legend-category-shape" style="width:${shapeSize}px;" src="${shape}"/>`;
+                    itemShape.innerHTML = `<img class="atlas-legend-category-shape" style="width:${shapeSize}px;" src="${imageSrc}"/>`;
                 }
 
                 if (item.cssClass) {
                     itemDiv.classList.add(item.cssClass);
                 }
 
+                if(legendType.collapse) {
+                    itemDiv.style.padding = '0px';
+                }
+
                 itemDiv.appendChild(itemShape);
 
-                if(fitItemsVertically){
+                if (fitItemsVertically) {
                     Object.assign(itemShape.style, {
                         position: 'relative'
                     });
@@ -622,7 +728,13 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
                 itemLabel.innerHTML = stringLabel;
                 itemLabel.setAttribute('aria-label', stringLabel);
                 if (legendType.labelsOverlapShapes) {
-                    itemLabel.style.position = 'absolute';
+                    Object.assign(itemLabel.style, {
+                        position: 'absolute',
+                        left: 0,
+                        right: 0,
+                        textAlign: 'center',
+                        margin: '0 auto'
+                    });
                 }
                 itemDiv.appendChild(itemLabel);
 
@@ -636,17 +748,17 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
 
                 let o: any = {};
 
-                if(fitItemsVertically){
+                if (fitItemsVertically) {
                     o.height = size;
                 } else {
                     o.width = size;
                 }
 
                 const retainWidth = fitItemsVertically || (legendType.layout && legendType.layout.startsWith('row') &&
-                legendType.itemLayout && legendType.itemLayout.startsWith('row'))
+                    legendType.itemLayout && legendType.itemLayout.startsWith('row'))
 
                 Array.prototype.forEach.call(elms, (el: HTMLElement) => {
-                    if(retainWidth) {
+                    if (retainWidth) {
                         o.width = (<HTMLElement>el.firstChild.firstChild).style.width;
                     }
 
@@ -687,15 +799,23 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
                 itemContainer.remove();
             };
 
-            if(legendType.maxHeight && legendType.maxHeight > 0){
-                img.style.maxWidth = legendType.maxHeight + 'px';
+            const maxHeight = legendType.maxHeight;
+            const maxWidth = legendType.maxWidth;
+
+            if (maxHeight && maxHeight > 0) {
+                img.style.maxWidth = maxHeight + 'px';
             }
 
-            if(legendType.maxWidth && legendType.maxWidth > 0){
-                img.style.maxWidth = legendType.maxWidth + 'px';
+            if (maxWidth && maxWidth > 0) {
+                img.style.maxWidth = maxWidth + 'px';
             }
 
-            img.src = legendType.url;
+            let imageSrc = legendType.url;
+            if (/<svg/i.test(imageSrc) && !(/^data:/i.test(imageSrc))) {
+                imageSrc = "data:image/svg+xml;base64," + window.btoa(imageSrc);
+            }
+
+            img.src = imageSrc;
 
             itemContainer.appendChild(img);
 
@@ -868,7 +988,7 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
                 svgWidth = maxTextWidth + width;
 
                 height = textY + ((textItems.length > 0) ? fontSize * 1.33 : 0);
-                svgHeight = height;                
+                svgHeight = height;
             }
 
             const id = Utils.uuid();

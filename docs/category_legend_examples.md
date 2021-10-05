@@ -75,11 +75,12 @@ The above category legend type options will generate a legend that looks like th
 
 ## Scaled shapes category legend
 
+The following legend options scale the size of individual shapes, in this case circles.
+
 ```javascript
 {
     type: 'category',
     subtitle: 'Category - Scaled shapes',
-    cssClass: 'centerItems',
     layout: 'column-reverse',
     itemLayout: 'row',
     shape: 'circle',
@@ -112,6 +113,52 @@ The above category legend type options will generate a legend that looks like th
 
 ![Category legend with scaled shapes](images/category-legend-scaled-shapes.jpg)
 
+## Scaled line legend
+
+The following legend options scale the thickness of line shapes.
+
+```javascript
+{
+    type: 'category',
+    subtitle: 'Category - Scaled lines',
+    layout: 'column-reverse',
+    itemLayout: 'row',
+    shape: 'line',
+    footer: 'A category legend that scales lines. Scale line thickness by using stroke width. Use shape size to specify length.',
+
+    //Setting fitItems to true will allow all shapes to be equally spaced out and centered.
+    fitItems: true,
+
+    //Use shape size to set line length.
+    shapeSize: 20,
+
+    //Scale lines by using stroke width.
+    items: [
+        {
+            label: '1',
+            strokeWidth: 1,
+            color: 'red'
+        }, {
+            label: '2',
+            strokeWidth: 2,
+            color: 'orange'
+        }, {
+            label: '4',
+            strokeWidth: 4,
+            color: 'purple'
+        }, {
+            label: '6',
+            strokeWidth: 6,
+            color: 'blue'
+        }
+    ]
+}
+```
+
+The above category legend type options will generate a legend that looks like the following.
+
+![Category legend with scaled shapes](images/category-legend-scaled-lines.jpg)
+
 ## Custom CSS category legend
 
 Passing in a CSS class to customize how the legend is rendered.
@@ -123,12 +170,12 @@ Passing in a CSS class to customize how the legend is rendered.
     layout: 'column',
     itemLayout: 'column',
     shape: 'square',
-    
-    //Pass in a CSS class the 
-    cssClass: 'collapsedCategory',
 
     //Have the labels overlap the shape. Otherwise the text span size may push the shape away from the other shapes.
     labelsOverlapShapes: true,
+
+    //Collapse the space between the items.
+    collapse: true,
 
     //Optionally remove the stroke around the shapes.
     strokeWidth: 0,
@@ -179,6 +226,20 @@ Passing in a CSS class to customize how the legend is rendered.
             cssClass: 'lightText'
         }
     ]
+}
+```
+
+Here is the custom CSS classes being used by this legend.
+
+```css
+.darkText {
+    color: black;
+    text-shadow: white 0 0 2px;
+}
+
+.lightText {
+    color: white;
+    text-shadow: black 0 0 2px;
 }
 ```
 

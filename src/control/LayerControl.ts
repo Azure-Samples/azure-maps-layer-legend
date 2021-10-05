@@ -2,6 +2,8 @@ import { BaseControl, BaseControlEvents, BaseControlOptions } from "./BaseContro
 import * as azmaps from 'azure-maps-control';
 import { Utils } from "../helpers/Utils";
 import { LegendControl, LegendType } from "./LegendControl";
+import { DynamicLegendType } from "../helpers/DynamicLegend";
+import { OgcMapLayer } from "../internal/TypingsOverrides";
 
 /** States that define style options to be applied to layers when they are enabled/disabled. */
 export interface LayerState {
@@ -31,6 +33,9 @@ export interface LayerState {
 
     /** Max zoom level that this state should appear. Default: `24` */
     maxZoom?: number;
+
+    /** Specifies how a state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'disable'` */
+    zoomBehavior?: 'disable' | 'hide';
 }
 
 /** States for an input range that defines style options to be applied to layers when a range slider changes. */
@@ -39,13 +44,13 @@ export interface RangeLayerState {
     min?: number;
 
     /** The maximum value of the range input. Default: `1` */
-    max: number;
+    max?: number;
 
     /** The incremental step value of the range input. Default: `0.1` */
-    step: number;
+    step?: number;
 
     /** The initial value of the range input. Default: `1` */
-    value: number;
+    value?: number;
 
     /** Style options to apply to layer when state changes. Use a placeholder of '{rangeValue}' in your expression. This will be replaced with the value from the range. */
     style?: any;
@@ -73,12 +78,18 @@ export interface RangeLayerState {
 
     /** Max zoom level that this state should appear. Default: `24` */
     maxZoom?: number;
+
+    /** Specifies how a state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'disable'` */
+    zoomBehavior?: 'disable' | 'hide';
 }
 
 /** A group of layer items. */
 export interface LayerGroup {
     /** How the layer state items are presented. Default: 'checkbox' */
     layout: 'dropdown' | 'checkbox' | 'radio' | 'range';
+
+    /** A CSS class to add to the layer group. */
+    cssClass?: string;
 
     /** The title of the layer group. */
     groupTitle?: string;
@@ -97,6 +108,36 @@ export interface LayerGroup {
 
     /** Max zoom level that this layer group should appear. Default: `24` */
     maxZoom?: number;
+
+    /** Specifies how a layer group or state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'disable'` */
+    zoomBehavior?: 'disable' | 'hide';
+}
+
+/** Options for a dynamic list of users layers within the map. */
+export interface DynamicLayerGroup {
+    /** A CSS class to add to the generated layer group. */
+    cssClass?: string;
+
+    /** How the layer state items are presented. Default: 'checkbox' */
+    layout?: 'dropdown' | 'checkbox' | 'radio';
+
+    /** The title of the layer group. */
+    groupTitle?: string;
+
+    /** One or more layers to filter out. By default, all user defined layers added to the map will be loaded. */
+    layerFilter?: (string | azmaps.layer.Layer)[];
+
+    /** One or more legends to display for the layer group. These legends only hide based on zoom level. */
+    legends?: LegendType[];
+
+    /** Property name of the layers metadata that should be used as a label. If not specified, the layers ID will be used. Values will be passed through the resx option to support localization if specified. */
+    labelProperty?: string;
+
+    /** The index to insert this layer group within controls other layer group collections. Default: `0` */
+    layerGroupIdx?: number;
+
+    /** Specifies how a layer group or state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'disable'` */
+    zoomBehavior?: 'disable' | 'hide';
 }
 
 /** Layer control options. */
@@ -107,7 +148,10 @@ export interface LayerControlOptions extends BaseControlOptions {
     /** One or more groups of layers and states. */
     layerGroups?: LayerGroup[];
 
-    /** Resource strings. */
+    /** Options for generating a layer group dynamically based off the user defined layers within the map. */
+    dynamicLayerGroup?: DynamicLayerGroup;
+
+    /** Resource strings. The dynamic layer state will check for alternative names for layer ID's. */
     resx?: Record<string, string>;
 
     /** A legend control to display the layer state legends in. */
@@ -147,12 +191,16 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
         layout: 'list',
         style: <azmaps.ControlStyle>'light',
         visible: true,
-        zoomRangeBehavior: 'disable',
+        zoomBehavior: 'disable',
         showToggle: true,
         minimized: false
     };
 
     private _stateCache: Record<string, LayerState> = {};
+
+    private _hasDynamic = false;
+
+    private _dynamicLegends: DynamicLegendType[];
 
     /****************************
      * Constructor
@@ -198,7 +246,7 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                     case 'visible':
                     case 'container':
                     case 'layout':
-                    case 'zoomRangeBehavior':
+                    case 'zoomBehavior':
                         //@ts-ignore
                         opt[key] = val;
                         break;
@@ -213,9 +261,40 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
         super.setOptions(options);
     }
 
+    public onAdd(map: azmaps.Map, options?: azmaps.ControlOptions): HTMLElement {
+        //Add events to monitor the layers being added and removed.
+        map.events.add('layeradded', this._layerChanged);
+        map.events.add('layerremoved', this._layerChanged);
+
+        return super.onAdd(map, options);
+    }
+
+    public onRemove(): void {
+        const self = this;
+        const map = self._map;
+        if (map) {
+            map.events.remove('layeradded', self._layerChanged);
+            map.events.remove('layerremoved', self._layerChanged);
+        }
+
+        return super.onRemove();
+    }
+
+    public refresh(): void {
+        this._rebuildContainer();
+    }
+
     /****************************
      * Private Methods
      ***************************/
+
+    /** Event handler for when a layer is added or removed from the map. */
+    private _layerChanged = (layer: azmaps.layer.Layer): void => {
+        const self = this;
+
+        //If layer control has dynamic layer groups, they will need to be updated.
+        self._rebuildContainer();
+    }
 
     /**
     * Navigates to the specified layer index within a carousel or list.
@@ -234,7 +313,54 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
         const opt = self._options;
         const resx = opt.resx || {};
         const layout = opt.layout;
-        const layerGroups = opt.layerGroups;
+        let hasZoomRange = false;
+
+        //Clone the layer group array as dynamic layer groups might get appended.
+        const layerGroups = (opt.layerGroups) ? opt.layerGroups.map((x) => x) : [];
+
+        const dlg = opt.dynamicLayerGroup;
+
+        //Get the layer groups to render.
+        if (dlg) {
+            let hasDynamic = false;
+
+            const lg = self._getLayerGroup(dlg)
+
+            if (lg) {
+                hasDynamic = true;
+                hasZoomRange = true;
+
+                let idx = dlg.layerGroupIdx;
+
+                if (typeof idx !== 'number' || idx < 0 || idx > layerGroups.length) {
+                    idx = 0;
+                }
+
+                layerGroups.splice(idx, 0, lg);
+
+                if (opt.legendControl) {
+                    //Create a dynamic legend type for all layers within layer group.
+                    //Each layer should only exist once in a dynamic layer group, and all layers are set at the item level.
+                    let legends: DynamicLegendType[] = [];
+
+                    lg.items.forEach(item => {
+                        if (item.layers) {
+                            item.layers.forEach(l => {
+                                legends.push({
+                                    type: 'dynamic',
+                                    layer: l
+                                });
+                            });
+                        }
+                    });
+
+                    opt.legendControl._replaceMany(self._dynamicLegends, legends);
+                    self._dynamicLegends = legends;
+                }
+            }
+
+            self._hasDynamic = hasDynamic;
+        }
 
         if (self._content) {
             self._content.remove();
@@ -253,8 +379,6 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
             const dotContainer = document.createElement('div');
             dotContainer.className = 'atlas-carousel-dot-container';
 
-            let hasZoomRange = false;
-
             for (let i = 0; i < layerGroups.length; i++) {
                 const id = Utils.uuid();
                 const lg = layerGroups[i];
@@ -264,7 +388,7 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
 
                 lg.minZoom = Utils.getNumber2(lg, lgZr, 'minZoom', 0, 0);
                 lg.maxZoom = Utils.getNumber2(lg, lgZr, 'maxZoom', 0, 24);
-                
+
                 //Only consider data zoomable if the zoom range is not the max range of 0 to 24.
                 if (lg.minZoom !== 0 || lg.maxZoom !== 24) {
                     hasZoomRange = true;
@@ -297,6 +421,10 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                 card.classList.add('atlas-layer-legend-card');
                 card.id = id;
 
+                if (lg.cssClass) {
+                    card.classList.add(lg.cssClass);
+                }
+
                 //Add the id to the `rel` attribute.
                 card.setAttribute('rel', i + '');
 
@@ -304,7 +432,7 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                 if (layout === 'accordion') {
                     titleString = Utils.getString(lg.groupTitle, resx);
                 } else {
-                    titleString = Utils.addStringDiv(card, lg.groupTitle, 'atlas-legend-group-title', resx, true);
+                    titleString = Utils.addStringDiv(card, lg.groupTitle, 'atlas-layer-group-title', resx, true);
                 }
 
                 if (lg.legends && opt.legendControl) {
@@ -342,8 +470,8 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
             self._hasZoomableContent = hasZoomRange;
 
             //Add carousel dots
-            if (layout === 'carousel'){
-                if(dotContainer.children.length > 1) {
+            if (layout === 'carousel') {
+                if (dotContainer.children.length > 1) {
                     Utils.addClearDiv(content);
                     content.appendChild(dotContainer);
                 }
@@ -398,9 +526,6 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
             const self = this;
             const legendControl = self._options.legendControl;
 
-            //Handle old state.
-            const oldState = self._updateStateCache(state, layers, (elm instanceof HTMLOptionElement) ? <HTMLSelectElement>elm.parentElement : elm);
-
             //Handle range slider
             if (elm instanceof HTMLInputElement && elm.type === 'range') {
                 const layerState = <RangeLayerState>state;
@@ -425,7 +550,11 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
 
                 layerState.value = val;
             } else {
-                let enabled = elm['checked'] || elm['selected'];
+                let enabled = (elm['checked'] !== undefined) ? elm['checked'] : elm['selected'];
+
+                if (enabled === undefined) {
+                    enabled = false;
+                }
 
                 if (elm instanceof HTMLOptionElement) {
                     enabled = (<HTMLSelectElement>elm.parentElement).selectedOptions[0] === elm;
@@ -456,7 +585,16 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                 }
 
                 layerState.enabled = enabled;
+
+                //If style changes visibility, ensure associated legends also change. 
+                const legend = self._options.legendControl;
+                if (typeof style.visible === 'boolean' && legend) {
+                    legend._rebuildContainer();
+                }
             }
+
+            //Handle old state.
+            const oldState = self._updateStateCache(state, layers, (elm instanceof HTMLOptionElement) ? <HTMLSelectElement>elm.parentElement : elm);
 
             self._invokeEvent('statechanged', {
                 type: 'statechanged',
@@ -493,7 +631,7 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                 }
 
                 //Store min/max zoom info as attributes.
-                Utils.setZoomRangeAttr(item, option);
+                Utils.setZoomRangeAttr(item, self._baseOptions, option);
 
                 dropdown.appendChild(option);
                 self._bindLayerState(item, layerGroup, option);
@@ -542,7 +680,7 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                 self._bindLayerState(item, layerGroup, input);
 
                 //Store min/max zoom info as attributes.
-                Utils.setZoomRangeAttr(item, label);
+                Utils.setZoomRangeAttr(item, self._baseOptions, label);
 
                 itemContainer.appendChild(label);
             });
@@ -562,6 +700,9 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
 
         if (layerGroup.items) {
             const items = <RangeLayerState[]>layerGroup.items;
+            const getNumber = Utils.getNumber;
+            const measureText = Utils.measureText;
+            const placeholder = '{rangeValue}';
 
             items.forEach(item => {
                 //<label><input type="range" /><span>Option 1</span></label>
@@ -571,10 +712,10 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                 const input = document.createElement('input');
                 input.type = 'range';
 
-                const min = Utils.getNumber(item, 'min', 0, 0);
-                const max = Utils.getNumber(item, 'max', 0, 1);
-                const step = Utils.getNumber(item, 'step', 0, 0.1);
-                const value = Utils.getNumber(item, 'value', 0, 1);
+                const min = getNumber(item, 'min', 0, 0);
+                const max = getNumber(item, 'max', 0, 1);
+                const step = getNumber(item, 'step', 0, 0.1);
+                const value = getNumber(item, 'value', 0, 1);
 
                 input.setAttribute('min', min + '');
                 input.setAttribute('max', max + '');
@@ -584,15 +725,22 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                 label.appendChild(input);
 
                 const span = document.createElement('span');
+                const labelString = item.label ? Utils.getString(item.label, self._options.resx) : placeholder;
+                const numberFormat = new Intl.NumberFormat(undefined, item.numberFormat || {});
+                span.innerHTML = labelString.replace(placeholder, numberFormat.format(value));
 
-                const labelString = item.label ? Utils.getString(item.label, self._options.resx) : '{rangeValue}';
-
-                span.innerHTML = labelString.replace('{rangeValue}', new Intl.NumberFormat(undefined, item.numberFormat || {}).format(value));
+                //Try and determine max width of label. Measure min, max, value, and max minus the step.
+                span.style.minWidth = Math.max(
+                    measureText(labelString.replace(placeholder, numberFormat.format(value)), 12, 'Arial').width,
+                    measureText(labelString.replace(placeholder, numberFormat.format(min)), 12, 'Arial').width,
+                    measureText(labelString.replace(placeholder, numberFormat.format(max)), 12, 'Arial').width,
+                    measureText(labelString.replace(placeholder, numberFormat.format(max - step)), 12, 'Arial').width
+                ) + 'px';
 
                 label.appendChild(span);
 
                 //Store min/max zoom info as attributes.
-                Utils.setZoomRangeAttr(item, label);
+                Utils.setZoomRangeAttr(item, self._baseOptions, label);
 
                 self._bindLayerState(item, layerGroup, input, item.updateOnInput);
                 itemContainer.appendChild(label);
@@ -615,15 +763,18 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
 
         //Handle old state of radio buttons.
         if ((elm instanceof HTMLInputElement && elm.type === 'radio') || elm instanceof HTMLSelectElement) {
-            const oldState = self._stateCache[elm.name];
+            const state = <LayerState>item;
+            const oldState = <LayerState>self._stateCache[elm.name];
 
-            if (oldState) {
+            if (oldState && oldState !== item) {
                 //Disable old state.
-                oldState.enabled = false;
+                oldState.enabled = !state.enabled;
 
                 //Trigger disabled styles.
-                if (oldState.disabledStyle) {
-                    oldState.layers.forEach(layer => self._setLayerStyle(layer, oldState.disabledStyle));
+                const oldStyle = (oldState.enabled) ? oldState.enabledStyle : oldState.disabledStyle;
+
+                if (oldStyle && oldState.layers) {
+                    oldState.layers.forEach(layer => self._setLayerStyle(layer, oldStyle));
                 }
 
                 //Remove any associated legend.
@@ -632,11 +783,14 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                         legendControl.remove(l);
                     });
                 }
+
+                if (state.enabled) {
+                    self._stateCache[elm.name] = state;
+                    return oldState;
+                }
+            } else if (!oldState && state.enabled) {
+                self._stateCache[elm.name] = state;
             }
-
-            self._stateCache[elm.name] = item;
-
-            return oldState;
         }
 
         return null;
@@ -763,7 +917,10 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
         if (map) {
             if (layerGroup && layerGroup.layers) {
                 layerGroup.layers.forEach(l => {
-                    layers.push(Utils.getLayer(l, map));
+                    var tl = Utils.getLayer(l, map);
+                    if (tl) {
+                        layers.push(tl);
+                    }
                 });
             }
 
@@ -794,5 +951,131 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
         }
 
         return layers;
+    }
+
+    /**
+     * Creates a layer group for a dynamic layer group.
+     * @param dynamicLayerGroup A dynamic layer group to process.
+     */
+    private _getLayerGroup(dynamicLayerGroup: DynamicLayerGroup): LayerGroup {
+        if (!dynamicLayerGroup.layout) {
+            return;
+        }
+
+        const self = this;
+        const layerGroup: LayerGroup = {
+            cssClass: dynamicLayerGroup.cssClass,
+            groupTitle: dynamicLayerGroup.groupTitle,
+            legends: dynamicLayerGroup.legends,
+            items: [],
+
+            //@ts-ignore
+            layout: dynamicLayerGroup.layout || 'checkbox'
+        };
+
+        //Get the layers from the map.
+        const layers = Utils.getMapLayers(self._map, dynamicLayerGroup.layerFilter);
+        const labelProperty = dynamicLayerGroup.labelProperty;
+
+        if (layers && layers.length > 0) {
+            //For radio and dropdowns, either select the first visible layer, or make the first visible.
+            let hasSelection = false;
+
+            layers.forEach(l => {
+                const opt = (l['getOptions']) ? l['getOptions']() : {};
+                let enabled = opt.visible;
+
+                if (enabled === undefined) {
+                    enabled = true;
+                }
+
+                if (layerGroup.layout === 'dropdown' || layerGroup.layout === 'radio') {
+                    if (hasSelection) {
+                        enabled = false;
+
+                        if (l['setOptions']) {
+                            l['setOptions']({ visible: false });
+                        }
+                    } else if (enabled) {
+                        hasSelection = true;
+                    }
+                }
+
+                let label = Utils.getString((labelProperty && l.metadata && l.metadata[labelProperty] && l.metadata[labelProperty] !== '') ? l.metadata[labelProperty] : l.getId(), self._options.resx);
+
+                const ogcLayer = azmaps.layer['OgcMapLayer'];
+                const simpleLayer = azmaps.layer['SimpleDataLayer'];
+
+                if (l.getId() === label && label.indexOf('-') > -1) {
+                    //If it is an OGC Map layer, get the label from the capabilities.
+                    if (ogcLayer && l instanceof ogcLayer) {
+                        const ogc = <OgcMapLayer>l;
+                        const client = ogc._client;
+
+                        if (client && client._capabilities) {
+                            const cap = client._capabilities;
+                            if (cap.title && cap.title !== '' && cap.title.toLowerCase() === 'wms') {
+                                label = cap.title;
+                            } else {
+                                const activeLayers = ogc.getOptions().activeLayers;
+                                const sublayers = cap.sublayers;
+
+                                if (activeLayers.length === 1 && sublayers) {
+                                    const al = activeLayers[0];
+
+                                    for (var i = 0; i < sublayers.length; i++) {
+                                        if ((typeof al === 'string' && al === sublayers[i].id) || al.id === sublayers[i].id) {
+                                            const styles = al.styles;
+
+                                            if (styles && styles.length > 0 && styles[0].legendUrl && styles[0].legendUrl !== '') {
+                                                label = al.title || al.subtitle || sublayers[i].id || '';
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            //If no client or capabilities, reload the capabilities.
+                            ogc.getCapabilities().then(cap => {
+                                if (cap) {
+                                    self._rebuildContainer();
+                                }
+                            });
+                        }
+                    } else if (simpleLayer && l instanceof simpleLayer) {
+                        const sLayer: any = l;
+                        if(sLayer.metadata){
+                            label = sLayer.metadata.title || sLayer.metadata.name || '';
+                        }
+                    }
+                }
+
+                layerGroup.items.push({
+                    layers: [l],
+                    label: label,
+                    enabled: enabled,
+                    enabledStyle: {
+                        visible: true
+                    },
+                    disabledStyle: {
+                        visible: false
+                    },
+                    minZoom: Utils.getNumber(opt, 'minZoom', 0, 0),
+                    maxZoom: Utils.getNumber(opt, 'maxZoom', 0, 24),
+                });
+            });
+
+            if (!hasSelection && (layerGroup.layout === 'dropdown' || layerGroup.layout === 'radio')) {
+                (<LayerState>layerGroup.items[0]).enabled = true;
+
+                if (layers[0]['setOptions']) {
+                    layers[0]['setOptions']({ visible: true });
+                }
+            }
+        } else {
+            return;
+        }
+
+        return layerGroup;
     }
 }

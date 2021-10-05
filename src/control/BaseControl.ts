@@ -1,4 +1,5 @@
 import atlas, * as azmaps from 'azure-maps-control';
+import { map } from 'lodash';
 import { LayerGroup, LayerState, LegendType } from '.';
 import { Utils } from '../helpers/Utils';
 
@@ -22,7 +23,7 @@ export interface BaseControlOptions {
     layout?: 'list' | 'carousel' | 'accordion';
 
     /** Specifies how a layer group or state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'disable'` */
-    zoomRangeBehavior?: 'disable' | 'hide';
+    zoomBehavior?: 'disable' | 'hide';
 
     /**	Specifies if a toggle button for minimizing the controls content should be displayed or not when the control within the map. Default: `true` */
     showToggle?: boolean;
@@ -67,7 +68,7 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
         layout: 'carousel',
         style: <azmaps.ControlStyle>'light',
         visible: true,
-        zoomRangeBehavior: 'hide',
+        zoomBehavior: 'hide',
         showToggle: true,
         minimized: false
     };
@@ -86,6 +87,9 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
 
     /** 0 - Legend control, 1 - Layer control, 2 - Expand, 3 - Collapse */
     private _localization: string[];
+
+    private _controlCount = 0;
+    private _controlWatcher: any;
 
     /****************************
      * Constructor
@@ -168,8 +172,8 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
         if (typeof self._baseOptions.visible !== 'undefined') {
             const display = (self._baseOptions.visible) ? '' : 'none';
 
-            if (self._container) {
-                self._container.style.display = display;
+            if (container) {
+                container.style.display = display;
             }
 
             if (self._content) {
@@ -177,9 +181,11 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             }
         }
 
+        self._controlWatcher = setInterval(self._checkControlCount, 1000);
+
         map.events.add('zoomend', self._mapZoomChanged);
         self._mapZoomChanged(null);
-        return self._container;
+        return container;
     }
 
     /**
@@ -196,6 +202,11 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
         if (self._container) {
             self._container.remove();
             self._container = null;
+        }
+
+        if(self._controlWatcher){
+            clearInterval(self._controlWatcher);
+            self._controlWatcher = null;
         }
 
         const map = self._map;
@@ -227,8 +238,8 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             self._setStyle(options.style);
         }
 
-        if (options.zoomRangeBehavior !== undefined) {
-            opt.zoomRangeBehavior = options.zoomRangeBehavior;
+        if (options.zoomBehavior !== undefined) {
+            opt.zoomBehavior = options.zoomBehavior;
             self._needsRebuild = true;
         }
 
@@ -264,9 +275,9 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             self._needsRebuild = true;
         }
 
-        if(options.showToggle !== undefined && opt.showToggle !== options.showToggle) {
+        if (options.showToggle !== undefined && opt.showToggle !== options.showToggle) {
             opt.showToggle = options.showToggle;
-            if(!options.showToggle) {
+            if (!options.showToggle) {
                 //If no toggle displayed, don't minimize control.
                 options.minimized = false;
             }
@@ -311,6 +322,8 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             content.appendChild(handle);
             content.appendChild(card);
         } else {
+            //Ensure to fallback incase user passed in bad value.
+            self._baseOptions.layout = 'list';
             content.appendChild(card);
         }
 
@@ -335,12 +348,27 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
         }
 
         //Store min/max zoom info as attributes.
-        Utils.setZoomRangeAttr(item, card, handle);
+        Utils.setZoomRangeAttr(item, self._baseOptions, card, handle);
     }
 
     /****************************
      * Private Methods
      ***************************/
+
+    private _checkControlCount = () => {
+        const self = this;
+        const map = self._map;
+        if(map){
+            const cnt = map.controls.getControls().length;
+
+            if(self._controlCount !== cnt) {
+                self._controlCount = cnt;
+
+                //Ensure control fits.
+                self._adjustSize();
+            }
+        }
+    };
 
     /**
      * Event handler for when the map zoom level has changed.
@@ -353,14 +381,12 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
 
         if (content) {
             if (self._hasZoomableContent) {
-                const zoom = Math.round(self._map.getCamera().zoom);
-
-                const zoomRangeBehavior = opt.zoomRangeBehavior;
+                const zoom = self._map.getCamera().zoom;
 
                 //Will either be the first visible legend, or the current index.
                 let fallbackIdx: number;
 
-                const cards = content.getElementsByClassName('atlas-layer-legend-card');
+                const cards = content.querySelectorAll('.atlas-layer-legend-card');
                 const handles = content.querySelectorAll('.atlas-carousel-dot, .atlas-accordion-button');
 
                 for (let i = 0; i < cards.length; i++) {
@@ -369,12 +395,13 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
 
                     const minZoom = parseInt(card.getAttribute('data-min-zoom'));
                     const maxZoom = parseInt(card.getAttribute('data-max-zoom'));
-                    const inRange = (zoom >= minZoom && zoom <= maxZoom);
+                    const zoomBehavior = card.getAttribute('data-zoom-behavior');
+                    const inRange = (zoom >= minZoom && Math.ceil(zoom) <= maxZoom);
                     const display = (inRange) ? '' : 'none';
 
-                    if (zoomRangeBehavior === 'hide') {
-                        if (opt.layout === 'carousel' || opt.layout === 'accordion') {                            
-                            if(handles.length > 0) {
+                    if (zoomBehavior === 'hide') {
+                        if (opt.layout === 'carousel' || opt.layout === 'accordion') {
+                            if (handles.length > 0) {
                                 //Handles only exist in carousel and accordion mode.
                                 (<HTMLElement>handles[i]).style.display = display;
                             }
@@ -390,10 +417,10 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
 
                     //Need to apply similar logic to state items which are wrapped as a label or option.
                     const elms = card.querySelectorAll('label, option');
-                    Utils.processZoomRangeAttr(elms, zoom, zoomRangeBehavior);
+                    Utils.processZoomRangeAttr(elms, zoom);
                 }
 
-                if (zoomRangeBehavior === 'hide') {
+                if (opt.zoomBehavior === 'hide') {
                     //Case when there is no layers visible, hide the layer control, but only if it is meant to be visible.
                     if (opt.visible && !opt.minimized) {
                         content.style.display = (typeof fallbackIdx === 'undefined') ? 'none' : '';
@@ -413,16 +440,19 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
     /**
      * Rebuilds the container.
      */
-    private _rebuildContainer(): void {
+    public _rebuildContainer = (): void => {
         const self = this;
         const opt = self._baseOptions;
-        
+        const container = self._container;
+
         self._createContent();
         self._setStyle(opt.style);
 
-        if(!opt.visible){
-            self._container.style.display = 'none';
-            self._content.style.display = 'none';
+        const content = self._content;
+
+        if (!opt.visible) {
+            container.style.display = 'none';
+            content.style.display = 'none';
         }
 
         if (!opt.container) {
@@ -463,34 +493,104 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             btnStyle.transform = `rotate(${rotation}deg)`;
             self._btnRotation = rotation;
 
+            container.onclick = self._contentBtnClicked;
+
             const btn = document.createElement("button");
             btn.setAttribute('type', 'button');
             btn.classList.add('atlas-layer-legend-expand-btn');
             Object.assign(btn.style, btnStyle);
             btn.addEventListener('click', self._toggle);
-            self._container.appendChild(btn);
-            self._btn = btn;
+            container.appendChild(btn);
+            
+            const ariaLabel = self._localization[self._nameIdx] + ' - ' + self._localization[3]; //Collapse
+            btn.setAttribute('title', ariaLabel);
+            btn.setAttribute('alt', ariaLabel);
 
+            self._btn = btn;
             self._setBtnState();
         }
 
         self._mapZoomChanged(null);
+        self._adjustSize();        
+    }
+
+    private _adjustSize(): void {
+        const self = this;
+        const opt = self._baseOptions;
+        const container = self._container;
 
         if (self._map) {
-            //When added to the map, don't let the control be more than 75% of the height of the map, and 100% map width, minus 20 pixels to account for margins..
             let maxWidth = 'unset';
             let maxHeight = 'unset';
 
-            if (!self._baseOptions.container) {
+            //When legend is displayed within the map, need to restrict the size of the legend content.
+            if (!opt.container) {
                 const rect = self._map.getCanvasContainer().getClientRects()[0];
-                maxHeight = rect.height * 0.75 + 'px';
-                maxWidth = (rect.width - 20) + 'px';
-            }
 
-            Object.assign(self._container.style, {
-                maxHeight: maxHeight,
-                maxWidth: maxWidth
-            });
+                //Subtract 20 pixels to account for padding around controls in the map.
+                maxWidth = (rect.width - 20) + 'px';
+
+                let maxContainerHeight = rect.height - 20;
+
+                const cp = <string>self._controlPosition;
+                if (cp && cp !== '' && cp !== 'non-fixed') {
+                    const side = (cp.indexOf('left') > -1)? 'left' : 'right';
+                    
+                    //Determine how many controls exist in the same position.
+                    let cnt = 0;
+
+                    //@ts-ignore
+                    const controlContainers = self._map.controls.controlContainer.children;
+                    Array.from(controlContainers).forEach(c => {
+                        if ((<HTMLElement>c).className.indexOf(side) > -1) {
+                            cnt += (<HTMLElement>c).children.length;
+                        }
+                    });
+
+                    if(cnt > 1) {
+                        //Account for this control.
+                        cnt--;
+
+                        //Account for legend control which we know uses a non-fixed position but is in the bottom right corner of the map.
+                        if(cp.indexOf('right') > -1) {
+                            cnt++;
+                        }
+
+                        //Give all other controls 35px space (button size), and 20px map padding.
+                        maxContainerHeight = Math.min(maxContainerHeight, rect.height - cnt * 35 - 20);
+                    }
+                }
+
+                //Set the max height of the container to 75% of the maps height, or the height minus 20 pixels, whichever is smaller.
+                Object.assign(container.style, {
+                    maxHeight: maxContainerHeight + 'px',
+                    maxWidth: maxWidth
+                });
+
+                if (opt.layout === 'accordion') {
+                    //Need to account for additional height to account fro button size. Give 30px per button and 20px for the title.
+                    const accordBtns = container.querySelectorAll('.atlas-accordion-button');
+                    maxContainerHeight = (maxContainerHeight - accordBtns.length * 30 - 20);
+                    maxHeight = maxContainerHeight + 'px';
+                } else if (opt.layout === 'carousel') {
+                    //Need to account for legend title and dot container height (height - 110px).
+                    maxContainerHeight = rect.height - 110;
+                    maxHeight = maxContainerHeight + 'px';
+                }
+
+                if(maxContainerHeight <= 40){
+                    maxHeight = 'unset';
+                }
+
+                let cardContainers = container.querySelectorAll('.atlas-layer-legend-card');
+
+                cardContainers.forEach(cc => {
+                    Object.assign((<HTMLElement>cc).style, {
+                        maxHeight: maxHeight,
+                        maxWidth: maxWidth
+                    });
+                });
+            }
         }
     }
 
@@ -719,12 +819,22 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
     /**
      * Toggle event handler for expand/collapse button.
      */
-    private _toggle = () => {
+    private _toggle = (e) => {
         const self = this;
         const opt = self._baseOptions;
         opt.minimized = !opt.minimized;
         self._setBtnState();
+        e.stopPropagation();
+        e.preventDefault();
+        return false;
     }
+
+    /** Event handler for when collapsed container is clicked. */
+    private _contentBtnClicked = (e) => {
+        if(this._baseOptions.minimized){
+            this._toggle(e);
+        }
+    };
 
     /**
      * Sets the minimized state of the expansion button.
@@ -739,17 +849,15 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             let w = '32px';
             let h = '32px';
             let display = 'none';
-            let r = self._btnRotation;
             let showBtnBg = false;
-            let ariaLabelIdx = 3; //Collapse
+            let ariaLabel = self._localization[self._nameIdx];
 
             //If toggle button isn't being to be displayed, then don't allow minimizing.
             const minimized = (opt.minimized && opt.showToggle);
 
             if (minimized) {
                 showBtnBg = true;
-                r = (r + 180) % 360;
-                ariaLabelIdx = 2; //Expand
+                ariaLabel += ' - ' + self._localization[2]; //Expand 
             } else {
                 display = '';
                 h = 'unset';
@@ -757,41 +865,43 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             }
 
             btn.setAttribute('aria-expanded', !minimized + '');
+            
 
-            if (self._container) {
+            const container = self._container;
+            if (container) {
                 //Hide/show the content.
                 if (self._content && opt.visible) {
                     self._content.style.display = display;
                 }
 
-                const classList = self._container.classList;
+                container.setAttribute('aria-expanded', !minimized + '');
+
+                const classList = container.classList;
                 if (showBtnBg) {
                     if (!classList.contains(btnCss)) {
                         classList.add(btnCss);
                     }
+
+                    btn.style.display = 'none';
+                    container.style.cursor = 'pointer';
                 } else {
                     classList.remove(btnCss);
+                    btn.style.display = '';
+                    container.style.cursor = '';
                 }
 
-                //Rotate the button.
-                btn.style.transform = `rotate(${r}deg)`;
+                container.setAttribute('title', ariaLabel);
+                container.setAttribute('alt', ariaLabel);
+                
 
                 //Resize the container to be the size of a button.
-                Object.assign(self._container.style, {
+                Object.assign(container.style, {
                     height: h,
                     width: w
                 });
-
-                if (self._content && opt.visible) {
-                    self._content.style.display = display;
-                }
             }
 
-            const ariaLabel = self._localization[ariaLabelIdx];
-            btn.setAttribute('title', ariaLabel);
-            btn.setAttribute('alt', ariaLabel);
-
-            if(opt.minimized !== minimized){
+            if (opt.minimized !== minimized) {
                 //@ts-ignore
                 self._invokeEvent('toggled', {
                     minimized: minimized,

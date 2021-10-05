@@ -5,4 +5,5 @@ import { Namespace } from "./helpers/Namespace";
 //Merge the local controls into the 'atlas.control' namespace.
 import * as baseControl from "./control";
 const control = Namespace.merge("atlas.control", baseControl);
+
 export { control };

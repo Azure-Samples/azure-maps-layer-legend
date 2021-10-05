@@ -25,6 +25,9 @@ declare namespace atlas {
         /** The size of the individual shape in pixels. Used to scale the width of the shape. Overrides `CategoryLegendType` level `shapeSize`. Default: 20 */
         shapeSize?: number;
 
+        /** The thickness of the stroke on SVG shapes in pixels. Overrides `CategoryLegendType` level `strokeWidth`. Default: `1` */
+        strokeWidth?: number;
+
         /** A CSS class added to an individual item.  */
         cssClass?: string;
     }
@@ -42,6 +45,9 @@ declare namespace atlas {
 
         /** How the color swatch and label of each item are laid out. Overrides the CSS `flex-direction` style. Default: 'row' */
         itemLayout?: 'row' | 'row-reverse' | 'column' | 'column-reverse';
+
+        /** Specifies if space around the shapes should be collapsed so that items are close together. Default: `false` */
+        collapse?: boolean;
 
         /** The fill color of SVG items in all category items. */
         color?: string;
@@ -104,7 +110,7 @@ declare namespace atlas {
         color: string;
 
         /** A label to display at this stop. */
-        label: string | number;
+        label?: string | number;
     }
 
     /** A legend for a sequential gradient scale.  */
@@ -140,16 +146,129 @@ declare namespace atlas {
         numberFormatLocales?: string | string[];
     }
 
+    /** A legend that dynamically generated from a layers style. */
+    export interface DynamicLegendType extends LegendType {
+        /** The type of legend to create. */
+        type: 'dynamic';
+
+        /** The layer to generate the legend(s) for. */
+        layer: string | azmaps.layer.Layer;
+
+        /** A CSS class added to all legend cards.  */
+        cssClass?: string;
+
+        /** Default options to apply to category legends. */
+        defaultCategory?: CategoryDefaults;
+
+        /** Default options for image legends. */
+        defaultImage?: ImageDefaults;
+
+        /** Default options for gradient legends. */
+        defaultGradient?: GradientDefaults;
+
+        /**
+         * Specifies how subtitles should be set if not explicitly set in the legend type. 
+         * - `'auto'` - Looks at the layers metadata for the following properties, in this order `'title'`,  `'subtitle'`. Falls back to the layers ID.
+         * - `'expression'` - If a style expression has a simple `get` expression such as `['get', 'revenue']` the property name will be extracted and set as the subtitle of the legend card. Falls back to the layers ID.
+         * - `'none'` - No subtitle value is added to the legend.
+         * - `string` - The name of a property in the layers metadata to use as the subtitle.
+         * Falls back to the layers ID unless set to `'none'`.
+         * Default: `'auto'`
+         */
+        subtitleFallback?: 'auto' | 'expression' | 'none' | string;
+
+        /**
+         * Specifies how footer should be set if not explicitly set in the legend type. 
+         * - `'auto'` - Looks at the layers metadata for the following properties, in this order `'footer'`,  `'description'`, `'abstract'`.
+         * - `'none'` - No footer value is added to the legend.
+         * - `string` - The name of a property in the layers metadata to use as the footer.
+         * Default: `'auto'`
+         */
+        footerFallback?: 'auto' | 'none' | string;
+    }
+
+    /** Default options to apply to category legends. */
+    export interface CategoryDefaults {
+        /** How all items are laid out. Overrides the CSS `flex-direction` style. Default: 'column' */
+        layout?: 'row' | 'row-reverse' | 'column' | 'column-reverse';
+
+        /** How the color swatch and label of each item are laid out. Overrides the CSS `flex-direction` style. Default: 'row' */
+        itemLayout?: 'row' | 'row-reverse' | 'column' | 'column-reverse';
+
+        /** The fill color of SVG items in all category items. */
+        color?: string;
+
+        /** The shape of the color swatches of all items. Supports image urls and SVG strings. Default: 'circle' */
+        shape?: 'circle' | 'triangle' | 'square' | 'line' | string;
+
+        /** The size of the all shapes in pixels. Used to scale the width of the shape. Default: `20` */
+        shapeSize?: number;
+
+        /** Specifies if all items should be fit into the largest container created by an item. Default: `false` */
+        fitItems?: boolean;
+
+        /** The thickness of the stroke on SVG shapes in pixels. Default: `1` */
+        strokeWidth?: number;
+
+        /** Specifies if the text label should overlap the shapes. When set to `true`, the position of the label span will be set to `absolute`. Default: `false`  */
+        labelsOverlapShapes?: boolean;
+
+        /** The number format options to use when converting a number label to a string. */
+        numberFormat?: Intl.NumberFormatOptions;
+
+        /** The number format locales to use when converting a number label to a string. */
+        numberFormatLocales?: string | string[];
+
+        /** A CSS class added to an individual item.  */
+        cssClass?: string;
+    }
+
+    /** Default options for image legends. */
+    export interface ImageDefaults {
+        /** Max height of the image. */
+        maxHeight?: number;
+
+        /** Max width of the image. */
+        maxWidth?: number;
+    }
+
+    /** Default options for gradient legends. */
+    export interface GradientDefaults {
+        /** The orientation of the legend. Default: `'horizontal'` */
+        orientation?: 'vertical' | 'horizontal';
+
+        /** The length of line ticks for each label. Default: `5` */
+        tickSize?: number;
+
+        /** The length of the gradient bar in pixels. Default: `200` */
+        barLength?: number;
+
+        /** How thick the gradient bar should be in pixels. Default: `20` */
+        barThickness?: number;
+
+        /** The font size used for labels. Default: `12` */
+        fontSize?: number;
+
+        /** The font family used for labels. Default: `"'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif"` */
+        fontFamily?: string;
+
+        /** The number format options to use when converting a number label to a string. */
+        numberFormat?: Intl.NumberFormatOptions;
+
+        /** The number format locales to use when converting a number label to a string. */
+        numberFormatLocales?: string | string[];
+    }
+
     /** Base legend type that all other legend types inherit from. */
     export interface LegendType {
         /** The type of legend to create. */
-        type: 'category' | 'image' | 'html' | 'gradient';
+        type: 'category' | 'dynamic' | 'image' | 'html' | 'gradient';
 
         /** The title for this specific legend. */
         subtitle?: string;
 
         /** Text to be added at the bottom of the legend. */
-        footer: string;
+        footer?: string;
 
         /** A CSS class to append to the legend type container. */
         cssClass?: string;
@@ -159,6 +278,9 @@ declare namespace atlas {
 
         /** Max zoom level that this legend should appear. Default: `24` */
         maxZoom?: number;
+    
+        /** Specifies how a legend card should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'hide'` */
+        zoomBehavior?: 'disable' | 'hide';
     }
 
     /** Options for a legend control. */
@@ -190,7 +312,7 @@ declare namespace atlas {
         layout?: 'list' | 'carousel' | 'accordion';
 
         /** Specifies how a layer group or state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'hide'` */
-        zoomRangeBehavior?: 'disable' | 'hide';
+        zoomBehavior?: 'disable' | 'hide';
 
         /**	Specifies if a toggle button for minimizing the controls content should be displayed or not when the control within the map. Default: `true` */
         showToggle?: boolean;
@@ -218,7 +340,7 @@ declare namespace atlas {
 
         /** The event type name. */
         type: 'legendfocused'
-     }
+    }
 
     /** States that define style options to be applied to layers when they are enabled/disabled. */
     export interface LayerState {
@@ -248,6 +370,9 @@ declare namespace atlas {
 
         /** Max zoom level that this state should appear. Default: `24` */
         maxZoom?: number;
+
+        /** Specifies how a layer group or state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'disable'` */
+        zoomBehavior?: 'disable' | 'hide';
     }
 
     /** States for an input range that defines style options to be applied to layers when a range slider changes. */
@@ -256,13 +381,13 @@ declare namespace atlas {
         min?: number;
 
         /** The maximum value of the range input. Default: `1` */
-        max: number;
+        max?: number;
 
         /** The incremental step value of the range input. Default: `0.1` */
-        step: number;
+        step?: number;
 
         /** The initial value of the range input. Default: `1` */
-        value: number;
+        value?: number;
 
         /** Style options to apply to layer when state changes. Use a placeholder of '{rangeValue}' in your expression. This will be replaced with the value from the range. */
         style?: any;
@@ -290,6 +415,9 @@ declare namespace atlas {
 
         /** Max zoom level that this state should appear. Default: `24` */
         maxZoom?: number;
+
+        /** Specifies how a layer group or state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'disable'` */
+        zoomBehavior?: 'disable' | 'hide';
     }
 
     /** A group of layer items. */
@@ -299,6 +427,9 @@ declare namespace atlas {
 
         /** The title of the layer group. */
         groupTitle?: string;
+
+        /** A CSS class to add to the layer group. */
+        cssClass?: string;
 
         /** One or more layers that are impacted by the layer state. */
         layers?: (string | azmaps.layer.Layer)[];
@@ -314,6 +445,36 @@ declare namespace atlas {
 
         /** Max zoom level that this layer group should appear. Default: `24` */
         maxZoom?: number;
+
+        /** Specifies how a layer group or state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'disable'` */
+        zoomBehavior?: 'disable' | 'hide';
+    }
+
+    /** Options for a dynamic list of users layers within the map. */
+    export interface DynamicLayerGroup {
+        /** A CSS class to add to the generated layer group. */
+        cssClass?: string;
+
+        /** How the layer state items are presented. Default: 'checkbox' */
+        layout: 'dropdown' | 'checkbox' | 'radio';
+
+        /** The title of the layer group. */
+        groupTitle?: string;
+
+        /** One or more layers to filter out. By default, all user defined layers added to the map will be loaded. */
+        layerFilter?: (string | azmaps.layer.Layer)[];
+
+        /** One or more legends to display for the layer group. These legends only hide based on zoom level. */
+        legends?: LegendType[];
+
+        /** Property name of the layers metadata that should be used as a label. If not specified, the layers ID will be used. Values will be passed through the resx option to support localization if specified. */
+        labelProperty?: string;
+
+        /** The index to insert this layer group within controls other layer group collections. Default: `0` */
+        layerGroupIdx?: number;
+
+        /** Specifies how a layer group or state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'disable'` */
+        zoomBehavior?: 'disable' | 'hide';
     }
 
     /** Layer control options. */
@@ -323,6 +484,9 @@ declare namespace atlas {
 
         /** One or more groups of layers and states. */
         layerGroups?: LayerGroup[];
+
+        /** Options for generating a layer group dynamically based off the user defined layers within the map. */
+        dynamicLayerGroup?: DynamicLayerGroup;
 
         /** Resource strings. */
         resx?: Record<string, string>;
@@ -348,7 +512,7 @@ declare namespace atlas {
         layout?: 'list' | 'carousel' | 'accordion';
 
         /** Specifies how a layer group or state should be treated when the map zoom level falls outside of the items min and max zoom range. Default: `'disable'` */
-        zoomRangeBehavior?: 'disable' | 'hide';
+        zoomBehavior?: 'disable' | 'hide';
 
         /**	Specifies if a toggle button for minimizing the controls content should be displayed or not when the control within the map. Default: `true` */
         showToggle?: boolean;
@@ -473,7 +637,7 @@ declare namespace atlas {
  * For the base definition see:
  * https://docs.microsoft.com/javascript/api/azure-maps-control/?view=azure-maps-typescript-latest
  */
- declare module "azure-maps-control" {
+declare module "azure-maps-control" {
     /**
      * This interface partially defines the map control's `EventManager`.
      * This definition only includes the method added by using the drawing tools.
@@ -497,7 +661,7 @@ declare namespace atlas {
          */
         addOnce(eventType: "legendfocused", target: atlas.control.LegendControl, callback: (e: atlas.LegendFocusEventArgs) => void): void;
 
- 
+
         /**
          * Removes an event listener from the `legendfocused`.
          * @param eventType The event name.
@@ -512,31 +676,31 @@ declare namespace atlas {
          * @param target The `statechanged` to add the event for.
          * @param callback The event handler callback.
          */
-         add(eventType: "statechanged", target: atlas.control.LayerControl, callback: (e: atlas.LayerStateChangedEventArgs) => void): void;
+        add(eventType: "statechanged", target: atlas.control.LayerControl, callback: (e: atlas.LayerStateChangedEventArgs) => void): void;
 
-         /**
-          * Adds an event to the `statechanged` once.
-          * @param eventType The event name.
-          * @param target The `statechanged` to add the event for.
-          * @param callback The event handler callback.
-          */
-         addOnce(eventType: "statechanged", target: atlas.control.LayerControl, callback: (e: atlas.LayerStateChangedEventArgs) => void): void;
- 
-  
-         /**
-          * Removes an event listener from the `statechanged`.
-          * @param eventType The event name.
-          * @param target The `statechanged` to remove the event for.
-          * @param callback The event handler callback.
-          */
-         remove(eventType: string, target: atlas.control.LayerControl, callback: (e: atlas.LayerStateChangedEventArgs) => void): void;
-
-         /**
-         * Adds an event to the `toggled`.
+        /**
+         * Adds an event to the `statechanged` once.
          * @param eventType The event name.
-         * @param target The `toggled` to add the event for.
+         * @param target The `statechanged` to add the event for.
          * @param callback The event handler callback.
          */
+        addOnce(eventType: "statechanged", target: atlas.control.LayerControl, callback: (e: atlas.LayerStateChangedEventArgs) => void): void;
+
+
+        /**
+         * Removes an event listener from the `statechanged`.
+         * @param eventType The event name.
+         * @param target The `statechanged` to remove the event for.
+         * @param callback The event handler callback.
+         */
+        remove(eventType: string, target: atlas.control.LayerControl, callback: (e: atlas.LayerStateChangedEventArgs) => void): void;
+
+        /**
+        * Adds an event to the `toggled`.
+        * @param eventType The event name.
+        * @param target The `toggled` to add the event for.
+        * @param callback The event handler callback.
+        */
         add(eventType: "toggled", target: atlas.control.LegendControl | atlas.control.LayerControl, callback: (e: atlas.ControlToggledEventArgs) => void): void;
 
         /**
@@ -547,7 +711,7 @@ declare namespace atlas {
          */
         addOnce(eventType: "toggled", target: atlas.control.LegendControl | atlas.control.LayerControl, callback: (e: atlas.ControlToggledEventArgs) => void): void;
 
- 
+
         /**
          * Removes an event listener from the `toggled`.
          * @param eventType The event name.

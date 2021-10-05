@@ -1,6 +1,6 @@
 {
   "name": "azure-maps-layer-legend",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "An Azure Maps Web SDK module that provides UI controls for dynamically styling layers and displaying legends on the map.",
   "keywords": [
     "azure",

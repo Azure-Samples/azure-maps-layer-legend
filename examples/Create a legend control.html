@@ -29,18 +29,18 @@
                 //Add authentication details for connecting to Azure Maps.
                 authOptions: {
                     //Use Azure Active Directory authentication.
-                    authType: 'anonymous',
+                   /* authType: 'anonymous',
                     clientId: "04ec075f-3827-4aed-9975-d56301a2d663", //Your Azure Active Directory client id for accessing your Azure Maps account.
                     getToken: function (resolve, reject, map) {
                         //URL to your authentication service that retrieves an Azure Active Directory Token.
                         var tokenServiceUrl = "https://azuremapscodesamples.azurewebsites.net/Common/TokenService.ashx";
 
                         fetch(tokenServiceUrl).then(r => r.text()).then(token => resolve(token));
-                    }
+                    }*/
 
                     //Alternatively, use an Azure Maps key. Get an Azure Maps key at https://azure.com/maps. NOTE: The primary key should be used as the key.
-                    //authType: 'subscriptionKey',
-                    //subscriptionKey: '<Your Azure Maps Key>'
+                    authType: 'subscriptionKey',
+                    subscriptionKey: '<Your Azure Maps Key>'
                 }
             });
 
@@ -99,7 +99,6 @@
                         {
                             type: 'category',
                             subtitle: 'Category - Scaled shapes',
-                            cssClass: 'centerItems',
                             layout: 'column-reverse',
                             itemLayout: 'row',
                             shape: 'circle',
@@ -125,7 +124,44 @@
                                     shapeSize: 40
                                 }
                             ]
-                        },               
+                        },
+
+                        //A category legend with different size lines.
+                        {
+                            type: 'category',
+                            subtitle: 'Category - Scaled lines',
+                            layout: 'column-reverse',
+                            itemLayout: 'row',
+                            shape: 'line',
+                            footer: 'A category legend that scales lines. Scale line thickness by using stroke width. Use shape size to specify length.',
+
+                            //Setting fitItems to true will allow all shapes to be equally spaced out and centered.
+                            fitItems: true,
+
+                            //Use shape size to set line length.
+                            shapeSize: 20,
+
+                            //Scale lines by using stroke width.
+                            items: [
+                                {
+                                    label: '1',
+                                    strokeWidth: 1,
+                                    color: 'red'
+                                }, {
+                                    label: '2',
+                                    strokeWidth: 2,
+                                    color: 'orange'
+                                }, {
+                                    label: '4',
+                                    strokeWidth: 4,
+                                    color: 'purple'
+                                }, {
+                                    label: '6',
+                                    strokeWidth: 6,
+                                    color: 'blue'
+                                }
+                            ]
+                        },      
 
                         //A category legend that uses custom CSS to collapse the space between the category items. 
                         {
@@ -135,11 +171,11 @@
                             itemLayout: 'column',
                             shape: 'square',
                             
-                            //Pass in a CSS class the 
-                            cssClass: 'collapsedCategory',
-
                             //Have the labels overlap the shape. Otherwise the text span size may push the shape away from the other shapes.
                             labelsOverlapShapes: true,
+
+                            //Collapse the space between the items.
+                            collapse: true,
 
                             //Optionally remove the stroke around the shapes.
                             strokeWidth: 0,
@@ -341,30 +377,14 @@
         }
     </script>
     <style>
-        .centerItems {
-            align-items: center;
-        }
-
-        .collapsedCategory div {
-            padding: 0px;
-        }
-
-        .collapsedCategory .atlas-legend-category-shape {
-            width: 20px !important;
-            stroke-width: 0px;
-        }
-
-        .collapsedCategory .atlas-legend-category-item span {
-            margin: 0px;
-            overflow: overlay;
-        }
-
         .darkText {
             color: black;
+            text-shadow: white 0 0 2px;
         }
 
         .lightText {
             color: white;
+            text-shadow: black 0 0 2px;
         }
     </style>
 </head>
