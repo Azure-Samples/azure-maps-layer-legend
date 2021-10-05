@@ -21,7 +21,11 @@ The following layers style properties will be used to generate legend cards if t
 | `SymbolLayer` | `iconOptions.image` | |
 | `SymbolLayer` | `iconOptions.size` | If a `CategoryLegendType` is generated and `iconOptions.image` property is a string, it will be used for the shape of this legend. |
 | [OgcMapLayer](https://docs.microsoft.com/en-us/azure/azure-maps/spatial-io-add-ogc-map-layer) | | The legend in the style of active layers will be rendered as an `ImageLegendType`. The subtitle will be set to the active layers `title`, `subtitle` or `id`. The footer will be set to the `description` or `abstract` property of the active layer. **NOTE** The `onActiveLayersChanged` will be overwritten and used by the legend control. |
-| [SimpleDataLayer](https://docs.microsoft.com/en-us/azure/azure-maps/spatial-io-add-simple-data-layer) | | Not supported as styles are defined at the feature level, not the layer level. |
+
+**Not supported**
+
+- [HTML marker layer](https://github.com/Azure-Samples/azure-maps-html-marker-layer)
+- [SimpleDataLayer](https://docs.microsoft.com/en-us/azure/azure-maps/spatial-io-add-simple-data-layer) - Styles are defined at the feature level, not the layer level.
 
 ## Supported style expressions
 
@@ -140,7 +144,3 @@ For example:
     7, 'red'
 ]
 ```
-
-## Additional known limitations
-
-- [HTML marker layer](https://github.com/Azure-Samples/azure-maps-html-marker-layer) not supported.
