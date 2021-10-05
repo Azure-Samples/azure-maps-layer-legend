@@ -85,7 +85,7 @@ map.events.add('statechanged', layerControl, function(e){
 
 API reference for the classes and interfaces related to the Layer control.
 
-### Layer control
+### LayerControl class
 
 **Namespace:** `atlas.control`
 

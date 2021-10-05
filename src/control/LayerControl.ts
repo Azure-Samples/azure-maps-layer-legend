@@ -198,8 +198,6 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
 
     private _stateCache: Record<string, LayerState> = {};
 
-    private _hasDynamic = false;
-
     private _dynamicLegends: DynamicLegendType[];
 
     /****************************
@@ -322,12 +320,9 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
 
         //Get the layer groups to render.
         if (dlg) {
-            let hasDynamic = false;
-
             const lg = self._getLayerGroup(dlg)
 
             if (lg) {
-                hasDynamic = true;
                 hasZoomRange = true;
 
                 let idx = dlg.layerGroupIdx;
@@ -358,8 +353,6 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                     self._dynamicLegends = legends;
                 }
             }
-
-            self._hasDynamic = hasDynamic;
         }
 
         if (self._content) {
@@ -575,7 +568,7 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                         const l = layerState.legends[i];
                         if (enabled) {
                             l.minZoom = Utils.getNumber2(l, layerState, 'minZoom', 0, 0);
-                            l.maxZoom = Utils.getNumber2(l, layerState, 'minZoom', 0, 24);
+                            l.maxZoom = Utils.getNumber2(l, layerState, 'maxZoom', 0, 24);
 
                             legendControl.add(l, (i === 0) ? focusLegend : false);
                         } else {

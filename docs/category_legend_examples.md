@@ -247,6 +247,28 @@ The above category legend type options will generate a legend that looks like th
 
 ![Category legend with custom CSS](images/category-legend-custom-css.jpg)
 
+## Custom styled legend
+
+The legend control style as a whole can be customized using a combination of CSS and legend control option settings. The following CSS overrides the top level styles of the legend control to create a truely custom looking legend.
+
+```css
+.atlas-legend-control {
+    color: white !important;
+    background-color: rgb(24 42 64 / 95%) !important;
+    box-shadow: 0px 0px 10px 5px #00c4ffb5 inset !important;
+    padding: 10px;
+    border-radius: 30px 5px 30px 5px !important;
+}
+
+.atlas-legend-control-container {
+    background-color: transparent !important;
+}
+```
+
+The above category legend type options will generate a legend that looks like the following.
+
+![Category legend with custom CSS](images/custom-styled-legend.png)
+
 ## Next steps
 
 - [Category legend type interface](legend_control.md#categorylegendtype-interface)

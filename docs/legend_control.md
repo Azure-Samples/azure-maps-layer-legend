@@ -116,7 +116,7 @@ map.events.add('legendfocused', legend, function(e){
 
 API reference for the classes and interfaces related to the Legend control.
 
-### Layer control
+### LegendControl class
 
 **Namespace:** `atlas.control`
 

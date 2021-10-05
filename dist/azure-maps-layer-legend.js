@@ -1472,6 +1472,8 @@ MIT License
             options = options || {};
             var self = this;
             var opt = self._baseOptions;
+            var container = self._container;
+            var content = self._content;
             var needsZoomFilter = false;
             if (options.style !== undefined) {
                 opt.style = options.style;
@@ -1484,11 +1486,11 @@ MIT License
             if (options.visible !== undefined) {
                 opt.visible = options.visible;
                 var display = (options.visible) ? '' : 'none';
-                if (self._container) {
-                    self._container.style.display = display;
+                if (container) {
+                    container.style.display = display;
                 }
-                if (self._content) {
-                    self._content.style.display = display;
+                if (content) {
+                    content.style.display = display;
                 }
                 needsZoomFilter = true;
             }
@@ -1634,14 +1636,14 @@ MIT License
         BaseControl.prototype._setStyle = function (style) {
             if (style) {
                 var self_1 = this;
-                var map_1 = self_1._map;
-                if (map_1) {
+                var map = self_1._map;
+                if (map) {
                     if (style.startsWith('auto') && !self_1._hclStyle) {
-                        map_1.events.add('styledata', self_1._mapStyleChanged);
+                        map.events.add('styledata', self_1._mapStyleChanged);
                         self_1._setColorFromMapStyle();
                     }
                     else {
-                        map_1.events.remove('styledata', self_1._mapStyleChanged);
+                        map.events.remove('styledata', self_1._mapStyleChanged);
                         self_1._setControlColor(style);
                     }
                 }
@@ -1725,17 +1727,18 @@ MIT License
                 var cards = self._content.getElementsByClassName('atlas-layer-legend-card');
                 var handles = self._content.querySelectorAll('.atlas-carousel-dot, .atlas-accordion-button');
                 var layout = self._baseOptions.layout;
+                var numCards = cards.length;
                 if (handles.length === 0) {
                     handles = null;
                 }
-                if (idx > cards.length) {
-                    idx = 0;
+                if (idx >= numCards) {
+                    idx = numCards - 1;
                 }
                 if (idx < 0 && layout !== 'accordion') {
-                    idx = cards.length;
+                    idx = 0;
                 }
                 self._currentIdx = idx;
-                for (var i = 0; i < cards.length; i++) {
+                for (var i = 0; i < numCards; i++) {
                     var card = cards[i];
                     var rel = parseInt(card.getAttribute('rel'));
                     if (layout === 'carousel') {
@@ -1817,10 +1820,10 @@ MIT License
                 //If toggle button isn't being to be displayed, then don't allow minimizing.
                 var minimized = (opt.minimized && opt.showToggle);
                 if (minimized) {
-                    showBtnBg = true;
                     ariaLabel += ' - ' + self._localization[2]; //Expand 
                 }
                 else {
+                    showBtnBg = opt.showToggle;
                     display = '';
                     h = 'unset';
                     w = 'unset';
@@ -1838,13 +1841,15 @@ MIT License
                         if (!classList.contains(btnCss)) {
                             classList.add(btnCss);
                         }
-                        btn.style.display = 'none';
-                        container.style.cursor = 'pointer';
+                        btn.style.display = '';
+                        container.style.cursor = '';
                     }
                     else {
                         classList.remove(btnCss);
-                        btn.style.display = '';
-                        container.style.cursor = '';
+                        btn.style.display = 'none';
+                        if (minimized) {
+                            container.style.cursor = 'pointer';
+                        }
                     }
                     container.setAttribute('title', ariaLabel);
                     container.setAttribute('alt', ariaLabel);
@@ -2596,7 +2601,6 @@ MIT License
                 minimized: false
             };
             _this._stateCache = {};
-            _this._hasDynamic = false;
             /****************************
              * Private Methods
              ***************************/
@@ -2655,7 +2659,7 @@ MIT License
                                 var l = layerState.legends[i];
                                 if (enabled) {
                                     l.minZoom = Utils.getNumber2(l, layerState, 'minZoom', 0, 0);
-                                    l.maxZoom = Utils.getNumber2(l, layerState, 'minZoom', 0, 24);
+                                    l.maxZoom = Utils.getNumber2(l, layerState, 'maxZoom', 0, 24);
                                     legendControl.add(l, (i === 0) ? focusLegend : false);
                                 }
                                 else {
@@ -2763,10 +2767,8 @@ MIT License
             var dlg = opt.dynamicLayerGroup;
             //Get the layer groups to render.
             if (dlg) {
-                var hasDynamic = false;
                 var lg = self._getLayerGroup(dlg);
                 if (lg) {
-                    hasDynamic = true;
                     hasZoomRange = true;
                     var idx = dlg.layerGroupIdx;
                     if (typeof idx !== 'number' || idx < 0 || idx > layerGroups.length) {
@@ -2791,7 +2793,6 @@ MIT License
                         self._dynamicLegends = legends_1;
                     }
                 }
-                self._hasDynamic = hasDynamic;
             }
             if (self._content) {
                 self._content.remove();

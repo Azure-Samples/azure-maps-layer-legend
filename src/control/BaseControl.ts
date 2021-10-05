@@ -1,5 +1,4 @@
 import atlas, * as azmaps from 'azure-maps-control';
-import { map } from 'lodash';
 import { LayerGroup, LayerState, LegendType } from '.';
 import { Utils } from '../helpers/Utils';
 
@@ -231,6 +230,9 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
 
         const self = this;
         const opt = self._baseOptions;
+        const container = self._container;
+        const content = self._content;
+
         let needsZoomFilter = false;
 
         if (options.style !== undefined) {
@@ -247,12 +249,12 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             opt.visible = options.visible;
             const display = (options.visible) ? '' : 'none';
 
-            if (self._container) {
-                self._container.style.display = display;
+            if (container) {
+                container.style.display = display;
             }
 
-            if (self._content) {
-                self._content.style.display = display;
+            if (content) {
+                content.style.display = display;
             }
 
             needsZoomFilter = true;
@@ -714,22 +716,23 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             const cards = self._content.getElementsByClassName('atlas-layer-legend-card');
             let handles = self._content.querySelectorAll('.atlas-carousel-dot, .atlas-accordion-button');
             const layout = self._baseOptions.layout;
+            const numCards = cards.length;
 
             if (handles.length === 0) {
                 handles = null;
             }
 
-            if (idx > cards.length) {
-                idx = 0;
+            if (idx >= numCards) {              
+                idx = numCards - 1;
             }
 
             if (idx < 0 && layout !== 'accordion') {
-                idx = cards.length;
+                idx = 0;
             }
 
             self._currentIdx = idx;
 
-            for (let i = 0; i < cards.length; i++) {
+            for (let i = 0; i < numCards; i++) {
                 const card = <HTMLElement>cards[i];
                 const rel = parseInt(card.getAttribute('rel'));
 
@@ -855,10 +858,10 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             //If toggle button isn't being to be displayed, then don't allow minimizing.
             const minimized = (opt.minimized && opt.showToggle);
 
-            if (minimized) {
-                showBtnBg = true;
+            if (minimized) {                
                 ariaLabel += ' - ' + self._localization[2]; //Expand 
             } else {
+                showBtnBg = opt.showToggle;
                 display = '';
                 h = 'unset';
                 w = 'unset';
@@ -866,7 +869,6 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
 
             btn.setAttribute('aria-expanded', !minimized + '');
             
-
             const container = self._container;
             if (container) {
                 //Hide/show the content.
@@ -882,17 +884,19 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
                         classList.add(btnCss);
                     }
 
-                    btn.style.display = 'none';
-                    container.style.cursor = 'pointer';
-                } else {
-                    classList.remove(btnCss);
                     btn.style.display = '';
                     container.style.cursor = '';
+                } else {
+                    classList.remove(btnCss);
+                    btn.style.display = 'none';
+
+                    if(minimized){
+                        container.style.cursor = 'pointer';
+                    }
                 }
 
                 container.setAttribute('title', ariaLabel);
-                container.setAttribute('alt', ariaLabel);
-                
+                container.setAttribute('alt', ariaLabel);                
 
                 //Resize the container to be the size of a button.
                 Object.assign(container.style, {
