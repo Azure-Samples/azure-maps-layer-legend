@@ -48,6 +48,7 @@
 .atlas-layer-control {
   font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   font-size: 12px;
+  width: fit-content;
 }
 .atlas-legend-content {
   display: inline-block;

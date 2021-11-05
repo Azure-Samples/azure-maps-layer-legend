@@ -10,6 +10,7 @@ export interface ZoomRange {
 }
 
 export class Utils {
+    private static HexCharRx = /&#x[0-9a-zA-Z]+;/g; 
 
     /**
      * Retrieves a string from a localized resource, the string value passed in, or an empty string.
@@ -242,8 +243,16 @@ export class Utils {
         const c = document.createElement("canvas");
         const ctx = c.getContext("2d");
         ctx.font = `${fontSize}px ${font || 'Arial'}`;
+
+        //Replace hexadecimal characters with capital W (largest single character) for measuring as special the canvas does not condense these characters.
+        if(Utils.HexCharRx.test(text)){
+            text = text.replace(Utils.HexCharRx, 'W');        
+        }
+
         return ctx.measureText(text);
     }
+
+    
 
     /**
     * Wraps text/HTML string with a div, adds it to a container, and adds a clear div underneath.

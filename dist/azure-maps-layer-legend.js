@@ -295,6 +295,10 @@ MIT License
             var c = document.createElement("canvas");
             var ctx = c.getContext("2d");
             ctx.font = fontSize + "px " + (font || 'Arial');
+            //Replace hexadecimal characters with capital W (largest single character) for measuring as special the canvas does not condense these characters.
+            if (Utils.HexCharRx.test(text)) {
+                text = text.replace(Utils.HexCharRx, 'W');
+            }
             return ctx.measureText(text);
         };
         /**
@@ -450,6 +454,7 @@ MIT License
             var factorOfTen = Math.pow(10, decimals);
             return Math.round(num * factorOfTen) / factorOfTen;
         };
+        Utils.HexCharRx = /&#x[0-9a-zA-Z]+;/g;
         return Utils;
     }());
 
