@@ -152,7 +152,7 @@ Options for a legend control.
 
 | Name | Value | Description |
 |------|-------|-------------|
-| `container` | `string | HTMLElement` | The ID of an element or HTMLElement instances to append the legend control to. If not defined, legend will be displayed within the map area. |
+| `container` | `string \| HTMLElement` | The ID of an element or HTMLElement instances to append the legend control to. If not defined, legend will be displayed within the map area. |
 | `layout` | `'accordion'` \| `'carousel'` \| `'list'` | How multiple items are laid out.<br/>- `'accordion'` adds each item or group as an accordion panel.<br/>- `'carousel`' allows the user to page through each item.<br/>- `'list'` adds items one after another vertically. Default: `'carousel'` |
 | `legends` | `LegendType[]` | The type of legend to generate. |
 | `minimized` | `boolean` | When displayed within the map, specifies if the controls content is minimized or not. Only used when `showToggle` is `true`. Default: `false` |
