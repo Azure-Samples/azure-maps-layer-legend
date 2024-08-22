@@ -880,14 +880,13 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
 
                 const classList = container.classList;
                 if (showBtnBg) {
-                    if (!classList.contains(btnCss)) {
-                        classList.add(btnCss);
-                    }
-
+                    classList.remove(btnCss);
                     btn.style.display = '';
                     container.style.cursor = '';
                 } else {
-                    classList.remove(btnCss);
+                    if (!classList.contains(btnCss)) {
+                        classList.add(btnCss);
+                    }
                     btn.style.display = 'none';
 
                     if(minimized){

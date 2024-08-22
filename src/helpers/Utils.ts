@@ -346,9 +346,9 @@ export class Utils {
         const userLayers: azmaps.layer.Layer[] = [];
 
         if (map) {
-            const mapLayers = map.layers.getLayers();
+            //Workaround: get user defined layers, not all layers (including basemap layers).
+            const mapLayers = map.layers['_getUserLayers']().map(l => l.layer);          
             const layers: azmaps.layer.Layer[] = [];
-
 
             let filter: string[] = [];
             if (layerFilter && layerFilter.length > 0) {
