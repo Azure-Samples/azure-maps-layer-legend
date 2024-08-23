@@ -1514,6 +1514,10 @@ MIT License
                 opt.layout = options.layout;
                 self._needsRebuild = true;
             }
+            if (options.maxWidth > 0 && opt.maxWidth !== options.maxWidth) {
+                opt.maxWidth = options.maxWidth;
+                self._adjustSize();
+            }
             if (options.showToggle !== undefined && opt.showToggle !== options.showToggle) {
                 opt.showToggle = options.showToggle;
                 if (!options.showToggle) {
@@ -1578,13 +1582,13 @@ MIT License
             var opt = self._baseOptions;
             var container = self._container;
             if (self._map) {
-                var maxWidth_1 = 'unset';
+                var maxWidth_1 = opt.maxWidth ? opt.maxWidth + 'px' : 'unset';
                 var maxHeight_1 = 'unset';
                 //When legend is displayed within the map, need to restrict the size of the legend content.
                 if (!opt.container) {
                     var rect = self._map.getCanvasContainer().getClientRects()[0];
-                    //Subtract 20 pixels to account for padding around controls in the map.
-                    maxWidth_1 = (rect.width - 20) + 'px';
+                    //Subtract 20 pixels to account for padding around controls in the map.               
+                    maxWidth_1 = Math.min(opt.maxWidth || 10000, rect.width - 20) + 'px';
                     var maxContainerHeight = rect.height - 20;
                     var cp = self._controlPosition;
                     if (cp && cp !== '' && cp !== 'non-fixed') {
@@ -1984,6 +1988,7 @@ MIT License
             options = options || {};
             var self = this;
             var opt = self._options;
+            var lastLegend = self._currentLegend;
             Object.keys(options).forEach(function (key) {
                 var val = options[key];
                 if (val !== undefined) {
@@ -1993,10 +1998,12 @@ MIT License
                         case 'container':
                         case 'layout':
                         case 'zoomBehavior':
+                        case 'maxWidth':
                             //@ts-ignore
                             opt[key] = val;
                             break;
                         case 'legends':
+                            lastLegend = null;
                             opt[key] = val;
                             //If the current legend isn't in the new set of legends, set the current legend to null and reset the legend index to 0.
                             var idx = 0;
@@ -2036,6 +2043,9 @@ MIT License
                 }
             });
             _super.prototype.setOptions.call(this, options);
+            if (lastLegend) {
+                self.focus(lastLegend);
+            }
         };
         /**
          * Navigates to the specified legend index within a carousel or list.
@@ -2092,10 +2102,19 @@ MIT License
         /**
          * Removes a legend from the legend control.
          * @param legend The legend to remove.
+         * @param skipRebuild Specifies if the legend control should be rebuilt after the legend is removed.
          */
         LegendControl.prototype.remove = function (legend, skipRebuild) {
+            var idx = this._getLegendIdx(legend);
+            this.removeAt(idx, skipRebuild);
+        };
+        /**
+         * Removes a legend from the legend control at the specified index.
+         * @param idx The index of the legend to remove.
+         * @param skipRebuild Specifies if the legend control should be rebuilt after the legend is removed.
+         */
+        LegendControl.prototype.removeAt = function (idx, skipRebuild) {
             var self = this;
-            var idx = self._getLegendIdx(legend);
             var legends = self._options.legends;
             //Make sure legend is in the legend control.
             if (idx > -1 && legends.length > idx) {
@@ -2497,6 +2516,12 @@ MIT License
                 var textStyle = void 0;
                 var barWidth = void 0;
                 var barHeight = void 0;
+                //Ensure all stops have an offset value.
+                legendType.stops.forEach(function (item) {
+                    if (typeof item.offset !== 'number') {
+                        item.offset = 0;
+                    }
+                });
                 //Ensure stops are sorted by offset.
                 legendType.stops.sort(function (a, b) {
                     return a.offset - b.offset;
@@ -2721,6 +2746,7 @@ MIT License
                         case 'container':
                         case 'layout':
                         case 'zoomBehavior':
+                        case 'maxWidth':
                             //@ts-ignore
                             opt[key] = val;
                             break;

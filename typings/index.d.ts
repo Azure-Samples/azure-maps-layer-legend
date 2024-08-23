@@ -546,7 +546,7 @@ declare namespace atlas {
         type: 'statechanged'
     }
 
-    export module control {
+    export namespace control {
 
         /** A control that displays legend information on the map. */
         export class LegendControl {
@@ -598,6 +598,12 @@ declare namespace atlas {
              * @param legend The legend to remove.
              */
             public remove(legend: LegendType): void;
+
+            /**
+             * Removes a legend from the legend control at the specified index.
+             * @param idx The index of the legend to remove.
+             */
+            public removeAt(idx: number): void ;
         }
 
         /** A control for creating a list of layers and actions. */

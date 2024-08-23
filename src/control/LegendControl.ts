@@ -247,6 +247,8 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
         const self = this;
         const opt = self._options;
 
+        let lastLegend = self._currentLegend;
+
         Object.keys(options).forEach(key => {
             const val = options[key];
 
@@ -257,10 +259,12 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
                     case 'container':
                     case 'layout':
                     case 'zoomBehavior':
+                    case 'maxWidth':
                         //@ts-ignore
                         opt[key] = val;
                         break;
                     case 'legends':
+                        lastLegend = null;
                         opt[key] = val;
                         //If the current legend isn't in the new set of legends, set the current legend to null and reset the legend index to 0.
                         let idx = 0;
@@ -308,6 +312,10 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
         });
 
         super.setOptions(options);
+
+        if(lastLegend) {
+            self.focus(lastLegend);
+        }
     }
 
     /**
@@ -373,10 +381,20 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
     /**
      * Removes a legend from the legend control.
      * @param legend The legend to remove.
+     * @param skipRebuild Specifies if the legend control should be rebuilt after the legend is removed.
      */
     public remove(legend: LegendType, skipRebuild?: boolean): void {
+        const idx = this._getLegendIdx(legend);
+        this.removeAt(idx, skipRebuild);
+    }
+
+    /**
+     * Removes a legend from the legend control at the specified index.
+     * @param idx The index of the legend to remove.
+     * @param skipRebuild Specifies if the legend control should be rebuilt after the legend is removed.
+     */
+    public removeAt(idx: number, skipRebuild?: boolean): void {
         const self = this;
-        const idx = self._getLegendIdx(legend);
         const legends = self._options.legends;
 
         //Make sure legend is in the legend control.
@@ -891,6 +909,13 @@ export class LegendControl extends BaseControl<LegendControlEvents> {
             let textStyle: string;
             let barWidth: number;
             let barHeight: number;
+
+            //Ensure all stops have an offset value.
+            legendType.stops.forEach(item => {
+                if (typeof item.offset !== 'number') {
+                    item.offset = 0;
+                }
+            });
 
             //Ensure stops are sorted by offset.
             legendType.stops.sort((a, b) => {

@@ -29,6 +29,9 @@ export interface BaseControlOptions {
 
     /** When displayed within the map, specifies if the controls content is minimized or not. Default: `false` */
     minimized?: boolean;
+
+    /** The max width the control is allowed to be in pixels. If the control is added to the map, it will also be limited to the width of the map minus 20 pixels to accound for padding. The smaller of these two widths will be used. */
+    maxWidth?: number;
 }
 
 /** Base control events. */
@@ -277,6 +280,12 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
             self._needsRebuild = true;
         }
 
+        if(options.maxWidth > 0 && opt.maxWidth !== options.maxWidth)
+        {
+            opt.maxWidth = options.maxWidth;
+            self._adjustSize();
+        }
+
         if (options.showToggle !== undefined && opt.showToggle !== options.showToggle) {
             opt.showToggle = options.showToggle;
             if (!options.showToggle) {
@@ -522,15 +531,15 @@ export abstract class BaseControl<T> extends azmaps.internal.EventEmitter<T> imp
         const container = self._container;
 
         if (self._map) {
-            let maxWidth = 'unset';
+            let maxWidth = opt.maxWidth ? opt.maxWidth + 'px' : 'unset';
             let maxHeight = 'unset';
 
             //When legend is displayed within the map, need to restrict the size of the legend content.
             if (!opt.container) {
                 const rect = self._map.getCanvasContainer().getClientRects()[0];
 
-                //Subtract 20 pixels to account for padding around controls in the map.
-                maxWidth = (rect.width - 20) + 'px';
+                //Subtract 20 pixels to account for padding around controls in the map.               
+                maxWidth =  Math.min(opt.maxWidth || 10000, rect.width - 20) + 'px';
 
                 let maxContainerHeight = rect.height - 20;
 

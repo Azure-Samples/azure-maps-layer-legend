@@ -245,6 +245,7 @@ export class LayerControl extends BaseControl<LayerControlEvents> {
                     case 'container':
                     case 'layout':
                     case 'zoomBehavior':
+                    case 'maxWidth':
                         //@ts-ignore
                         opt[key] = val;
                         break;
