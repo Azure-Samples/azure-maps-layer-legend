@@ -320,9 +320,16 @@ MIT License
                     textElm.setAttribute('aria-label', text);
                     container.appendChild(textElm);
                     if (!skipMeasure) {
+                        //Seperate the string into individual lines.
+                        var lines = text.split(/<br\/>|<br>|\n|\r/g);
+                        var size_1 = 0;
+                        //Loop through each line and measure it.
+                        lines.forEach(function (l) {
+                            var s = Utils.measureText(l, 14);
+                            size_1 = Math.max(size_1, s.width);
+                        });
                         //Ensure there is enough space for the title and the expanding button.
-                        var size = Utils.measureText(text, 14);
-                        textElm.style.minWidth = Math.ceil(size.width + 20) + 'px';
+                        textElm.style.minWidth = Math.ceil(size_1 + 20) + 'px';
                     }
                     if (addClear) {
                         Utils.addClearDiv(container);

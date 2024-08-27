@@ -277,9 +277,17 @@ export class Utils {
                 container.appendChild(textElm);
 
                 if (!skipMeasure) {
+                    //Seperate the string into individual lines.
+                    let lines = text.split(/<br\/>|<br>|\n|\r/g);
+                    let size = 0;
+
+                    //Loop through each line and measure it.
+                    lines.forEach(l => {
+                        const s = Utils.measureText(l, 14);
+                        size = Math.max(size, s.width);
+                    });
                     //Ensure there is enough space for the title and the expanding button.
-                    const size = Utils.measureText(text, 14);
-                    textElm.style.minWidth = Math.ceil(size.width + 20) + 'px';
+                    textElm.style.minWidth = Math.ceil(size + 20) + 'px';
                 }
 
                 if (addClear) {
