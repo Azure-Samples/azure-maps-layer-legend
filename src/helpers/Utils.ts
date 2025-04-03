@@ -1,7 +1,6 @@
 import * as azmaps from 'azure-maps-control';
-import { at } from 'lodash';
 import { BaseControlOptions } from 'src/control/BaseControl';
-import { DynamicLayerGroup, LayerGroup, LayerState, LegendType } from '../control';
+import { LayerGroup, LayerState, LegendType } from '../control';
 
 /** Min/max zoom level range. */
 export interface ZoomRange {
